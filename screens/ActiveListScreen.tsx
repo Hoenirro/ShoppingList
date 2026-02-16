@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
-import { ShoppingList, ShoppingItem, ShoppingSession, ActiveSession } from '../types';
+import { ShoppingList, ShoppingListItem, ShoppingSession, ActiveSession } from '../types';
 
 export default function ActiveListScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -20,7 +20,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const [checkedItems, setCheckedItems] = useState<{[key: string]: boolean}>({});
   const [itemPrices, setItemPrices] = useState<{[key: string]: number}>({});
   const [priceModalVisible, setPriceModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<ShoppingItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<ShoppingListItem | null>(null);
   const [priceInput, setPriceInput] = useState('');
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
     setList(foundList || null);
   };
 
-  const handleItemPress = (item: ShoppingItem) => {
+  const handleItemPress = (item: ShoppingListItem) => {
     setSelectedItem(item);
     setPriceInput(item.lastPrice.toString());
     setPriceModalVisible(true);
@@ -53,18 +53,18 @@ export default function ActiveListScreen({ route, navigation }: any) {
     // Mark item as checked and store price
     setCheckedItems(prev => ({
       ...prev,
-      [selectedItem.id]: true
+      [selectedItem.masterItemId]: true
     }));
     
     setItemPrices(prev => ({
       ...prev,
-      [selectedItem.id]: price
+      [selectedItem.masterItemId]: price
     }));
 
     // Update item price if changed
     if (price !== selectedItem.lastPrice) {
       const updatedItems = list.items.map(item => {
-        if (item.id === selectedItem.id) {
+        if (item.masterItemId === selectedItem.masterItemId) {
           const newAveragePrice = (item.averagePrice * (list.items.length - 1) + price) / list.items.length;
           return {
             ...item,
@@ -91,13 +91,13 @@ export default function ActiveListScreen({ route, navigation }: any) {
     setPriceInput('');
   };
 
-  const handleTakePhoto = async (item: ShoppingItem) => {
+  const handleTakePhoto = async (item: ShoppingListItem) => {
     const uri = await ShoppingListStorage.pickImage();
     if (uri && list) {
       const savedUri = await ShoppingListStorage.saveImage(uri, 'product');
       
       const updatedItems = list.items.map(i => {
-        if (i.id === item.id) {
+        if (i.masterItemId === item.masterItemId) {
           return { ...i, imageUri: savedUri, updatedAt: Date.now() };
         }
         return i;
@@ -128,13 +128,13 @@ export default function ActiveListScreen({ route, navigation }: any) {
     // Calculate total
     let total = 0;
     const sessionItems = list.items.map(item => {
-      const price = itemPrices[item.id] || item.lastPrice;
+      const price = itemPrices[item.masterItemId] || item.lastPrice;
       total += price;
       return {
-        itemId: item.id,
+        masterItemId: item.masterItemId,
         name: item.name,
         price: price,
-        checked: checkedItems[item.id] || false
+        checked: checkedItems[item.masterItemId] || false
       };
     });
 
@@ -165,9 +165,9 @@ export default function ActiveListScreen({ route, navigation }: any) {
     return total;
   };
 
-  const renderItem = ({ item }: { item: ShoppingItem }) => {
-    const isChecked = checkedItems[item.id];
-    const itemPrice = itemPrices[item.id] || item.lastPrice;
+  const renderItem = ({ item }: { item: ShoppingListItem }) => {
+    const isChecked = checkedItems[item.masterItemId] || false;
+    const itemPrice = itemPrices[item.masterItemId] || item.lastPrice;
 
     return (
       <TouchableOpacity
@@ -238,7 +238,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
       <FlatList
         data={list.items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.masterItemId}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>

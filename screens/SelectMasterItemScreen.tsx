@@ -1,4 +1,4 @@
-// screens/ItemManagerScreen.tsx
+// screens/SelectMasterItemScreen.tsx
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -7,14 +7,14 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  Alert,
   TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
 import { MasterItem } from '../types';
 
-export default function ItemManagerScreen({ navigation }: any) {
+export default function SelectMasterItemScreen({ route, navigation }: any) {
+  const { listId } = route.params;
   const [items, setItems] = useState<MasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -29,29 +29,17 @@ export default function ItemManagerScreen({ navigation }: any) {
     setItems(loadedItems);
   };
 
-  const handleEditItem = (item?: MasterItem) => {
-    navigation.navigate('EditMasterItem', { 
-      itemId: item?.id,
-      returnTo: 'ItemManager'
-    });
+  const handleSelectItem = async (item: MasterItem) => {
+    // Add the selected master item to the shopping list
+    await ShoppingListStorage.addMasterItemToList(listId, item.id);
+    navigation.goBack();
   };
 
-  const handleDeleteItem = (item: MasterItem) => {
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will NOT remove it from existing shopping lists.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await ShoppingListStorage.deleteMasterItem(item.id);
-            loadItems();
-          },
-        },
-      ]
-    );
+  const handleCreateNew = () => {
+    navigation.navigate('EditMasterItem', { 
+      returnTo: 'SelectMasterItem',
+      listId: listId // Pass listId so we know where to return
+    });
   };
 
   const filteredItems = items.filter(item =>
@@ -60,7 +48,10 @@ export default function ItemManagerScreen({ navigation }: any) {
   );
 
   const renderItem = ({ item }: { item: MasterItem }) => (
-    <View style={styles.itemContainer}>
+    <TouchableOpacity
+      style={styles.itemContainer}
+      onPress={() => handleSelectItem(item)}
+    >
       {item.imageUri ? (
         <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
       ) : (
@@ -72,30 +63,13 @@ export default function ItemManagerScreen({ navigation }: any) {
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.itemBrand}>{item.brand}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Default: </Text>
-          <Text style={styles.priceValue}>${item.defaultPrice.toFixed(2)}</Text>
-          <Text style={styles.priceLabel}>  Avg: </Text>
-          <Text style={styles.priceValue}>${item.averagePrice.toFixed(2)}</Text>
-        </View>
+        <Text style={styles.itemPrice}>Default: ${item.defaultPrice.toFixed(2)}</Text>
       </View>
       
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditItem(item)}
-        >
-          <Text style={styles.editButtonText}>✎</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteItem(item)}
-        >
-          <Text style={styles.deleteButtonText}>🗑</Text>
-        </TouchableOpacity>
+      <View style={styles.addIcon}>
+        <Text style={styles.addIconText}>+</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -106,14 +80,13 @@ export default function ItemManagerScreen({ navigation }: any) {
           placeholder="Search items..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
         />
         
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => handleEditItem()}
+          style={styles.createButton}
+          onPress={handleCreateNew}
         >
-          <Text style={styles.addButtonText}>+ Create New Master Item</Text>
+          <Text style={styles.createButtonText}>+ Create New Item</Text>
         </TouchableOpacity>
       </View>
 
@@ -124,9 +97,9 @@ export default function ItemManagerScreen({ navigation }: any) {
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No master items yet</Text>
+            <Text style={styles.emptyText}>No master items found</Text>
             <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Try a different search' : 'Create your first master item!'}
+              {searchQuery ? 'Try a different search' : 'Create your first item!'}
             </Text>
           </View>
         }
@@ -152,15 +125,14 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     marginBottom: 12,
-    color: '#333',
   },
-  addButton: {
+  createButton: {
     backgroundColor: '#007AFF',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  addButtonText: {
+  createButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
@@ -202,50 +174,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 2,
-    color: '#333',
   },
   itemBrand: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  priceLabel: {
-    fontSize: 12,
-    color: '#999',
-  },
-  priceValue: {
+  itemPrice: {
     fontSize: 14,
-    fontWeight: '500',
     color: '#007AFF',
+    fontWeight: '500',
   },
-  actionButtons: {
-    flexDirection: 'row',
-  },
-  actionButton: {
+  addIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: '#4CAF50',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
   },
-  editButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  editButtonText: {
-    fontSize: 18,
-    color: '#666',
-  },
-  deleteButton: {
-    backgroundColor: '#ff3b30',
-  },
-  deleteButtonText: {
-    fontSize: 18,
+  addIconText: {
+    fontSize: 24,
     color: '#fff',
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',

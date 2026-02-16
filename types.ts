@@ -1,13 +1,23 @@
-
-export interface ShoppingItem {
+// types.ts
+export interface MasterItem {
   id: string;
   name: string;
   brand: string;
-  lastPrice: number;
+  defaultPrice: number;
   averagePrice: number;
   imageUri?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ShoppingListItem {
+  masterItemId: string;  // Link to master item
+  name: string;          // Snapshot of name at time of adding
+  brand: string;         // Snapshot of brand
+  lastPrice: number;     // Price paid last time
+  averagePrice: number;  // Running average
+  imageUri?: string;     // Can have custom image for this list
+  addedAt: number;
 }
 
 export interface ShoppingList {
@@ -15,7 +25,7 @@ export interface ShoppingList {
   name: string;
   createdAt: number;
   updatedAt: number;
-  items: ShoppingItem[];
+  items: ShoppingListItem[];  // Now using ShoppingListItem
 }
 
 export interface ShoppingSession {
@@ -26,7 +36,7 @@ export interface ShoppingSession {
   total: number;
   receiptImageUri?: string;
   items: {
-    itemId: string;
+    masterItemId: string;
     name: string;
     price: number;
     checked: boolean;
@@ -36,7 +46,7 @@ export interface ShoppingSession {
 export interface ActiveSession extends ShoppingSession {
   isActive: boolean;
   checkedItems: {
-    [itemId: string]: {
+    [masterItemId: string]: {
       checked: boolean;
       price?: number;
       imageUri?: string;
@@ -50,7 +60,10 @@ export type RootStackParamList = {
   ItemManager: undefined;
   ShoppingList: { listId: string };
   ActiveList: { listId: string };
-  EditItem: { listId: string; item?: ShoppingItem; returnTo?: string };
+  EditMasterItem: { itemId?: string; returnTo?: string; listId?: string };
+  EditListItem: { listId: string; listItemId?: string; masterItemId?: string };
+  SelectMasterItem: { listId: string };
+  
   History: undefined;
   SessionDetails: { sessionId: string };
 };

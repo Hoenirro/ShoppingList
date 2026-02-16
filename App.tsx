@@ -9,10 +9,12 @@ import { ShoppingListStorage } from './utils/storage';
 import WelcomeScreen from './screens/WelcomeScreen';
 import ShoppingListScreen from './screens/ShoppingListScreen';
 import ActiveListScreen from './screens/ActiveListScreen';
-import EditItemScreen from './screens/EditItemScreen';
 import ItemManagerScreen from './screens/ItemManagerScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
+import EditMasterItemScreen from './screens/EditMasterItemScreen';
+import EditListItemScreen from './screens/EditListItemScreen';
+import SelectMasterItemScreen from './screens/SelectMasterItemScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -101,13 +103,28 @@ export default function App() {
             }}
           />
           <Stack.Screen 
-            name="EditItem" 
-            component={EditItemScreen} 
+            name="EditMasterItem" 
+            component={EditMasterItemScreen} 
             options={{ 
-              title: 'Edit Item',
+              title: 'Edit Master Item',
               presentation: 'modal',
             }}
           />
+          <Stack.Screen 
+            name="EditListItem" 
+            component={EditListItemScreen} 
+            options={{ 
+              title: 'Edit List Item',
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen 
+            name="SelectMasterItem" 
+            component={SelectMasterItemScreen} 
+            options={{ 
+            title: 'Select Item to Add',
+          }}
+/>
         </Stack.Navigator>
         <StatusBar style="auto" />
       </NavigationContainer>

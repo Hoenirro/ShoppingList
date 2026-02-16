@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { ShoppingList, ShoppingItem, ShoppingSession } from '../types';
+import { ShoppingList, ShoppingListItem, MasterItem, ShoppingSession } from '../types';
 
 // Use the new Paths API for base directories
 const { Paths } = FileSystem;
@@ -11,12 +11,13 @@ const IMAGES_DIR = new FileSystem.Directory(Paths.document, 'images');
 const PRODUCTS_IMAGES_DIR = new FileSystem.Directory(IMAGES_DIR, 'products');
 const RECEIPTS_IMAGES_DIR = new FileSystem.Directory(IMAGES_DIR, 'receipts');
 const SESSIONS_DIR = new FileSystem.Directory(Paths.document, 'sessions');
+const MASTER_ITEMS_DIR = new FileSystem.Directory(Paths.document, 'master_items');
 
 
 
 export class ShoppingListStorage {
   static async initialize() {
-  const dirs = [LISTS_DIR, PRODUCTS_IMAGES_DIR, RECEIPTS_IMAGES_DIR, SESSIONS_DIR];
+  const dirs = [LISTS_DIR, PRODUCTS_IMAGES_DIR, RECEIPTS_IMAGES_DIR, SESSIONS_DIR, MASTER_ITEMS_DIR];
   for (const dir of dirs) {
     try {
       if (!dir.exists) {
@@ -26,6 +27,79 @@ export class ShoppingListStorage {
       console.error(`Error creating directory ${dir.uri}:`, error);
     }
   }
+}
+
+static async getAllMasterItems(): Promise<MasterItem[]> {
+  try {
+    if (!MASTER_ITEMS_DIR.exists) {
+      return [];
+    }
+
+    const contents = MASTER_ITEMS_DIR.list();
+    const items: MasterItem[] = [];
+    
+    for (const item of contents) {
+      if (item instanceof FileSystem.File && item.uri.endsWith('.json')) {
+        const content = await item.text();
+        items.push(JSON.parse(content));
+      }
+    }
+    
+    return items.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (error) {
+    console.error('Error reading master items:', error);
+    return [];
+  }
+}
+
+static async saveMasterItem(item: MasterItem): Promise<void> {
+  try {
+    const file = new FileSystem.File(MASTER_ITEMS_DIR, `${item.id}.json`);
+    
+    if (!MASTER_ITEMS_DIR.exists) {
+      MASTER_ITEMS_DIR.create({ intermediates: true });
+    }
+    
+    await file.write(JSON.stringify(item, null, 2));
+  } catch (error) {
+    console.error('Error saving master item:', error);
+    throw error;
+  }
+}
+
+static async deleteMasterItem(itemId: string): Promise<void> {
+  try {
+    const file = new FileSystem.File(MASTER_ITEMS_DIR, `${itemId}.json`);
+    if (file.exists) {
+      file.delete();
+    }
+  } catch (error) {
+    console.error('Error deleting master item:', error);
+  }
+}
+
+static async addMasterItemToList(listId: string, masterItemId: string): Promise<void> {
+  const lists = await this.getAllLists();
+  const list = lists.find(l => l.id === listId);
+  if (!list) return;
+
+  const masterItems = await this.getAllMasterItems();
+  const masterItem = masterItems.find(i => i.id === masterItemId);
+  if (!masterItem) return;
+
+  const newListItem: ShoppingListItem = {
+    masterItemId: masterItem.id,
+    name: masterItem.name,
+    brand: masterItem.brand,
+    lastPrice: masterItem.defaultPrice,
+    averagePrice: masterItem.averagePrice,
+    imageUri: masterItem.imageUri,
+    addedAt: Date.now()
+  };
+
+  list.items.push(newListItem);
+  list.updatedAt = Date.now();
+  await this.saveList(list);
 }
 
 static async saveSession(session: ShoppingSession): Promise<void> {

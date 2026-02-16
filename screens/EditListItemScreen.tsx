@@ -1,4 +1,4 @@
-// screens/EditItemScreen.tsx
+// screens/EditListItemScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,31 +11,52 @@ import {
   ScrollView,
 } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
-import { ShoppingList, ShoppingItem } from '../types';
+import { ShoppingList, ShoppingListItem, MasterItem } from '../types';
 
-export default function EditItemScreen({ route, navigation }: any) {
-  const { listId, item, returnTo } = route.params || {};
+export default function EditListItemScreen({ route, navigation }: any) {
+  const { listId, listItemId, masterItemId } = route.params;
   const [list, setList] = useState<ShoppingList | null>(null);
-  const [name, setName] = useState(item?.name || '');
-  const [brand, setBrand] = useState(item?.brand || '');
-  const [price, setPrice] = useState(item?.lastPrice?.toString() || '');
-  const [imageUri, setImageUri] = useState(item?.imageUri || '');
+  const [listItem, setListItem] = useState<ShoppingListItem | null>(null);
+  const [masterItem, setMasterItem] = useState<MasterItem | null>(null);
+  
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [price, setPrice] = useState('');
+  const [imageUri, setImageUri] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    loadList();
+    loadData();
   }, []);
 
-  const loadList = async () => {
-    // If listId is 'global', we're in ItemManager mode
-    if (listId === 'global') {
-      setList(null); // No specific list for global items
-      return;
-    }
-    
+  const loadData = async () => {
+    // Load the shopping list
     const lists = await ShoppingListStorage.getAllLists();
-    const foundList = lists.find(l => l.id === listId);
-    setList(foundList || null);
+    const currentList = lists.find(l => l.id === listId);
+    setList(currentList || null);
+
+    if (currentList && listItemId) {
+      // Editing existing list item
+      const item = currentList.items.find(i => i.masterItemId === listItemId);
+      if (item) {
+        setListItem(item);
+        setName(item.name);
+        setBrand(item.brand);
+        setPrice(item.lastPrice.toString());
+        setImageUri(item.imageUri || '');
+      }
+    } else if (masterItemId) {
+      // Adding new item from master catalog
+      const masterItems = await ShoppingListStorage.getAllMasterItems();
+      const master = masterItems.find(i => i.id === masterItemId);
+      if (master) {
+        setMasterItem(master);
+        setName(master.name);
+        setBrand(master.brand);
+        setPrice(master.defaultPrice.toString());
+        setImageUri(master.imageUri || '');
+      }
+    }
   };
 
   const handleTakePhoto = async () => {
@@ -47,7 +68,7 @@ export default function EditItemScreen({ route, navigation }: any) {
   };
 
   const handleSave = async () => {
-    if (isSaving) return; // Prevent double-saving
+    if (isSaving || !list) return;
     
     if (!name.trim() || !brand.trim() || !price.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -63,114 +84,71 @@ export default function EditItemScreen({ route, navigation }: any) {
     setIsSaving(true);
 
     try {
-      const now = Date.now();
-
-      if (listId === 'global') {
-        // Handle global item (add to all lists or create standalone)
-        // For now, we'll just show a success message
-        Alert.alert('Success', 'Item saved successfully', [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              if (returnTo === 'ItemManager') {
-                navigation.navigate('ItemManager');
-              } else {
-                navigation.goBack();
-              }
-            }
-          }
-        ]);
-        return;
-      }
-
-      if (!list) {
-        Alert.alert('Error', 'List not found');
-        setIsSaving(false);
-        return;
-      }
-
       const updatedItems = [...list.items];
 
-      if (item) {
-        // Update existing item
-        const index = updatedItems.findIndex(i => i.id === item.id);
+      if (listItem) {
+        // Update existing list item
+        const index = updatedItems.findIndex(i => i.masterItemId === listItem.masterItemId);
         if (index !== -1) {
           updatedItems[index] = {
-            ...item,
-            name,
-            brand,
+            ...listItem,
+            name: name.trim(),
+            brand: brand.trim(),
             lastPrice: priceNum,
-            imageUri: imageUri || item.imageUri,
-            updatedAt: now,
+            imageUri: imageUri || listItem.imageUri,
           };
         }
-      } else {
-        // Create new item
-        const newItem: ShoppingItem = {
-          id: Date.now().toString(),
-          name,
-          brand,
+      } else if (masterItem) {
+        // Add new item to list from master catalog
+        const newListItem: ShoppingListItem = {
+          masterItemId: masterItem.id,
+          name: name.trim(),
+          brand: brand.trim(),
           lastPrice: priceNum,
-          averagePrice: priceNum,
-          imageUri: imageUri || undefined,
-          createdAt: now,
-          updatedAt: now,
+          averagePrice: masterItem.averagePrice,
+          imageUri: imageUri || masterItem.imageUri,
+          addedAt: Date.now(),
         };
-        updatedItems.push(newItem);
+        updatedItems.push(newListItem);
       }
 
       const updatedList = {
         ...list,
         items: updatedItems,
-        updatedAt: now,
+        updatedAt: Date.now(),
       };
 
       await ShoppingListStorage.saveList(updatedList);
       
-      // Navigate back with success
-      if (returnTo === 'ItemManager') {
-        navigation.navigate('ItemManager');
-      } else {
-        navigation.goBack();
-      }
+      navigation.goBack();
     } catch (error) {
-      console.error('Error saving item:', error);
+      console.error('Error saving list item:', error);
       Alert.alert('Error', 'Failed to save item');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = () => {
-    if (!list || !item) return;
+  const handleDelete = async () => {
+    if (!list || !listItem) return;
 
     Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}" from this list?`,
+      'Remove Item',
+      `Remove "${listItem.name}" from this shopping list?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            try {
-              const updatedItems = list.items.filter(i => i.id !== item.id);
-              const updatedList = {
-                ...list,
-                items: updatedItems,
-                updatedAt: Date.now(),
-              };
-              await ShoppingListStorage.saveList(updatedList);
-              
-              if (returnTo === 'ItemManager') {
-                navigation.navigate('ItemManager');
-              } else {
-                navigation.goBack();
-              }
-            } catch (error) {
-              console.error('Error deleting item:', error);
-              Alert.alert('Error', 'Failed to delete item');
-            }
+            const updatedItems = list.items.filter(i => i.masterItemId !== listItem.masterItemId);
+            const updatedList = {
+              ...list,
+              items: updatedItems,
+              updatedAt: Date.now(),
+            };
+            await ShoppingListStorage.saveList(updatedList);
+            navigation.goBack();
           },
         },
       ]
@@ -192,7 +170,7 @@ export default function EditItemScreen({ route, navigation }: any) {
         </TouchableOpacity>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Item Name</Text>
+          <Text style={styles.label}>Item Name *</Text>
           <TextInput
             style={styles.input}
             value={name}
@@ -202,7 +180,7 @@ export default function EditItemScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Brand</Text>
+          <Text style={styles.label}>Brand *</Text>
           <TextInput
             style={styles.input}
             value={brand}
@@ -212,7 +190,7 @@ export default function EditItemScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Last Price</Text>
+          <Text style={styles.label}>Price for this trip *</Text>
           <TextInput
             style={styles.input}
             value={price}
@@ -229,16 +207,25 @@ export default function EditItemScreen({ route, navigation }: any) {
             disabled={isSaving}
           >
             <Text style={styles.saveButtonText}>
-              {isSaving ? 'Saving...' : 'Save Item'}
+              {isSaving ? 'Saving...' : 'Save to List'}
             </Text>
           </TouchableOpacity>
 
-          {item && listId !== 'global' && (
-            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-              <Text style={styles.deleteButtonText}>Delete Item</Text>
+          {listItem && (
+            <TouchableOpacity 
+              style={styles.deleteButton} 
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>Remove from List</Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {masterItem && (
+          <Text style={styles.note}>
+            ℹ️ This item is from your master catalog. Changes here only affect this shopping list.
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -298,7 +285,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
   },
   buttonContainer: {
-    marginTop: 24,
+    marginTop: 8,
   },
   saveButton: {
     backgroundColor: '#007AFF',
@@ -325,5 +312,12 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  note: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 16,
   },
 });

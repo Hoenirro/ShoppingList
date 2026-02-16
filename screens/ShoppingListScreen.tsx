@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
-import { ShoppingList, ShoppingItem } from '../types';
+import { ShoppingList, ShoppingListItem } from '../types';
 
 export default function ShoppingListScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -30,15 +30,19 @@ export default function ShoppingListScreen({ route, navigation }: any) {
     navigation.navigate('ActiveList', { listId });
   };
 
-  const handleEditItem = (item?: ShoppingItem) => {
-    navigation.navigate('EditItem', { listId, item });
-  };
+  const handleEditItem = (item: ShoppingListItem) => {
+  navigation.navigate('EditListItem', { 
+    listId, 
+    listItemId: item.masterItemId 
+  });
+};
 
   const handleAddItem = () => {
-    navigation.navigate('EditItem', { listId });
-  };
+  // Navigate to selection screen instead of directly to edit
+  navigation.navigate('SelectMasterItem', { listId });
+};
 
-  const handleRemoveItem = (item: ShoppingItem) => {
+  const handleRemoveItem = (item: ShoppingListItem) => {
     if (!list) return;
     
     Alert.alert(
@@ -50,7 +54,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            const updatedItems = list.items.filter(i => i.id !== item.id);
+            const updatedItems = list.items.filter(i => i.masterItemId !== item.masterItemId);
             const updatedList = {
               ...list,
               items: updatedItems,
@@ -64,7 +68,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
     );
   };
 
-  const renderItem = ({ item }: { item: ShoppingItem }) => (
+  const renderItem = ({ item }: { item: ShoppingListItem }) => (
     <View style={styles.itemContainer}>
       {item.imageUri ? (
         <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
@@ -128,7 +132,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
       <FlatList
         data={list.items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.masterItemId}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
