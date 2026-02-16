@@ -24,18 +24,26 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    async function prepare() {
-      try {
-        await ShoppingListStorage.initialize();
-      } catch (error) {
-        console.error('Error initializing app:', error);
-      } finally {
-        setIsReady(true);
-      }
+  async function prepare() {
+    try {
+      await ShoppingListStorage.initialize();
+      await ShoppingListStorage.migrateExistingItems();
+      
+      // Run cleanup in the background, don't await it
+      // This prevents it from blocking app startup
+      ShoppingListStorage.cleanupOrphanedImages().catch(error => {
+        console.log('Cleanup error (non-critical):', error);
+      });
+      
+    } catch (error) {
+      console.error('Error initializing app:', error);
+    } finally {
+      setIsReady(true);
     }
+  }
 
-    prepare();
-  }, []);
+  prepare();
+}, []);
 
   if (!isReady) {
     return (

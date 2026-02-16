@@ -37,22 +37,22 @@ export default function ItemManagerScreen({ navigation }: any) {
   };
 
   const handleDeleteItem = (item: MasterItem) => {
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will NOT remove it from existing shopping lists.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await ShoppingListStorage.deleteMasterItem(item.id);
-            loadItems();
-          },
+  Alert.alert(
+    'Delete Item',
+    `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will NOT remove it from existing shopping lists.`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await ShoppingListStorage.deleteMasterItem(item.id);
+          loadItems();
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
   const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
