@@ -1,5 +1,6 @@
 // screens/ShoppingListScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -15,10 +16,17 @@ import { ShoppingList, ShoppingListItem } from '../types';
 export default function ShoppingListScreen({ route, navigation }: any) {
   const { listId } = route.params;
   const [list, setList] = useState<ShoppingList | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(
+  useCallback(() => {
     loadList();
-  }, []);
+  }, [])
+);
+
+const handleRefresh = () => {
+  loadList();
+};
 
   const loadList = async () => {
     const lists = await ShoppingListStorage.getAllLists();
@@ -134,6 +142,8 @@ export default function ShoppingListScreen({ route, navigation }: any) {
         renderItem={renderItem}
         keyExtractor={(item) => item.masterItemId}
         contentContainerStyle={styles.listContainer}
+        refreshing={refreshing}
+  onRefresh={handleRefresh}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No items in this list</Text>

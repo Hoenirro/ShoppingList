@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
@@ -17,12 +18,23 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
   const { listId } = route.params;
   const [items, setItems] = useState<MasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
 
   useFocusEffect(
-    useCallback(() => {
-      loadItems();
-    }, [])
-  );
+  useCallback(() => {
+    loadItems();
+    loadCurrentListItems();
+  }, [])
+);
+
+const loadCurrentListItems = async () => {
+  const lists = await ShoppingListStorage.getAllLists();
+  const currentList = lists.find(l => l.id === listId);
+  if (currentList) {
+    const addedIds = new Set(currentList.items.map(item => item.masterItemId));
+    setAddedItemIds(addedIds);
+  }
+};
 
   const loadItems = async () => {
     const loadedItems = await ShoppingListStorage.getAllMasterItems();
@@ -30,10 +42,17 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
   };
 
   const handleSelectItem = async (item: MasterItem) => {
-    // Add the selected master item to the shopping list
-    await ShoppingListStorage.addMasterItemToList(listId, item.id);
-    navigation.goBack();
-  };
+  if (addedItemIds.has(item.id)) {
+    Alert.alert('Already Added', `${item.name} is already in this list`);
+    return;
+  }
+
+  await ShoppingListStorage.addMasterItemToList(listId, item.id);
+  setAddedItemIds(prev => new Set(prev).add(item.id));
+  Alert.alert('Success', `${item.name} added to list`, [
+    { text: 'OK' }
+  ]);
+};
 
   const handleCreateNew = () => {
     navigation.navigate('EditMasterItem', { 
@@ -47,10 +66,14 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
     item.brand.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderItem = ({ item }: { item: MasterItem }) => (
+  const renderItem = ({ item }: { item: MasterItem }) => {
+  const isAdded = addedItemIds.has(item.id);
+  
+  return (
     <TouchableOpacity
-      style={styles.itemContainer}
+      style={[styles.itemContainer, isAdded && styles.disabledItem]}
       onPress={() => handleSelectItem(item)}
+      disabled={isAdded}
     >
       {item.imageUri ? (
         <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
@@ -61,16 +84,23 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
       )}
       
       <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
-        <Text style={styles.itemPrice}>Default: ${item.defaultPrice.toFixed(2)}</Text>
+        <Text style={[styles.itemName, isAdded && styles.disabledText]}>
+          {item.name}
+        </Text>
+        <Text style={[styles.itemBrand, isAdded && styles.disabledText]}>
+          {item.brand}
+        </Text>
+        <Text style={[styles.itemPrice, isAdded && styles.disabledText]}>
+          Default: ${item.defaultPrice.toFixed(2)}
+        </Text>
       </View>
       
-      <View style={styles.addIcon}>
-        <Text style={styles.addIconText}>+</Text>
+      <View style={[styles.addIcon, isAdded && styles.addedIcon]}>
+        <Text style={styles.addIconText}>{isAdded ? '✓' : '+'}</Text>
       </View>
     </TouchableOpacity>
   );
+};
 
   return (
     <View style={styles.container}>
@@ -126,6 +156,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
+  disabledItem: {
+  opacity: 0.6,
+  backgroundColor: '#f8f8f8',
+},
+disabledText: {
+  color: '#999',
+},
+addedIcon: {
+  backgroundColor: '#999',
+},
   createButton: {
     backgroundColor: '#007AFF',
     padding: 12,

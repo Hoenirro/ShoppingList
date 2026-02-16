@@ -15,6 +15,7 @@ import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import EditMasterItemScreen from './screens/EditMasterItemScreen';
 import EditListItemScreen from './screens/EditListItemScreen';
 import SelectMasterItemScreen from './screens/SelectMasterItemScreen';
+import PriceHistoryScreen from './screens/PriceHistoryScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -124,6 +125,13 @@ export default function App() {
             options={{ 
             title: 'Select Item to Add',
           }}
+/>
+<Stack.Screen 
+  name="PriceHistory" 
+  component={PriceHistoryScreen} 
+  options={{ 
+    title: 'Price History',
+  }}
 />
         </Stack.Navigator>
         <StatusBar style="auto" />

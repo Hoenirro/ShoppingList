@@ -61,6 +61,12 @@ export default function ItemManagerScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: MasterItem }) => (
     <View style={styles.itemContainer}>
+    <TouchableOpacity
+      onPress={() => navigation.navigate('PriceHistory', { 
+        masterItemId: item.id, 
+        itemName: item.name 
+      })}
+    >
       {item.imageUri ? (
         <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
       ) : (
@@ -68,6 +74,7 @@ export default function ItemManagerScreen({ navigation }: any) {
           <Text style={styles.placeholderText}>📷</Text>
         </View>
       )}
+    </TouchableOpacity>
       
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
@@ -81,20 +88,30 @@ export default function ItemManagerScreen({ navigation }: any) {
       </View>
       
       <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditItem(item)}
-        >
-          <Text style={styles.editButtonText}>✎</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteItem(item)}
-        >
-          <Text style={styles.deleteButtonText}>🗑</Text>
-        </TouchableOpacity>
-      </View>
+  <TouchableOpacity
+    style={[styles.actionButton, styles.historyButton]}
+    onPress={() => navigation.navigate('PriceHistory', { 
+      masterItemId: item.id, 
+      itemName: item.name 
+    })}
+  >
+    <Text style={styles.historyButtonText}>📊</Text>
+  </TouchableOpacity>
+  
+  <TouchableOpacity
+    style={[styles.actionButton, styles.editButton]}
+    onPress={() => handleEditItem(item)}
+  >
+    <Text style={styles.editButtonText}>✎</Text>
+  </TouchableOpacity>
+  
+  <TouchableOpacity
+    style={[styles.actionButton, styles.deleteButton]}
+    onPress={() => handleDeleteItem(item)}
+  >
+    <Text style={styles.deleteButtonText}>🗑</Text>
+  </TouchableOpacity>
+</View>
     </View>
   );
 
@@ -187,6 +204,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
   },
+  historyButton: {
+  backgroundColor: '#4CAF50',
+},
+historyButtonText: {
+  fontSize: 18,
+  color: '#fff',
+},
   placeholderThumbnail: {
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',

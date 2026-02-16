@@ -105,6 +105,7 @@ export default function EditListItemScreen({ route, navigation }: any) {
           name: name.trim(),
           brand: brand.trim(),
           lastPrice: priceNum,
+          priceAtAdd: priceNum,
           averagePrice: masterItem.averagePrice,
           imageUri: imageUri || masterItem.imageUri,
           addedAt: Date.now(),

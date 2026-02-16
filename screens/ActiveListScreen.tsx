@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
-import { ShoppingList, ShoppingListItem, ShoppingSession, ActiveSession } from '../types';
+import { ShoppingList, ShoppingListItem, ShoppingSession } from '../types';
 
 export default function ActiveListScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -24,6 +24,10 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const [priceInput, setPriceInput] = useState('');
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [estimatedTotal, setEstimatedTotal] = useState(0);
+  const [actualTotal, setActualTotal] = useState(0);
+  const [actualPaid, setActualPaid] = useState('');
+const [editingActual, setEditingActual] = useState(false);
 
   useEffect(() => {
     loadList();
@@ -50,6 +54,15 @@ export default function ActiveListScreen({ route, navigation }: any) {
       return;
     }
 
+    // Add to price history
+    await ShoppingListStorage.addPriceToHistory(
+      selectedItem.masterItemId,
+      price,
+      list.id,
+      list.name,
+      receiptImage || undefined
+    );
+
     // Mark item as checked and store price
     setCheckedItems(prev => ({
       ...prev,
@@ -60,31 +73,6 @@ export default function ActiveListScreen({ route, navigation }: any) {
       ...prev,
       [selectedItem.masterItemId]: price
     }));
-
-    // Update item price if changed
-    if (price !== selectedItem.lastPrice) {
-      const updatedItems = list.items.map(item => {
-        if (item.masterItemId === selectedItem.masterItemId) {
-          const newAveragePrice = (item.averagePrice * (list.items.length - 1) + price) / list.items.length;
-          return {
-            ...item,
-            lastPrice: price,
-            averagePrice: newAveragePrice,
-            updatedAt: Date.now(),
-          };
-        }
-        return item;
-      });
-
-      const updatedList = {
-        ...list,
-        items: updatedItems,
-        updatedAt: Date.now(),
-      };
-
-      await ShoppingListStorage.saveList(updatedList);
-      setList(updatedList);
-    }
 
     setPriceModalVisible(false);
     setSelectedItem(null);
@@ -98,7 +86,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
       
       const updatedItems = list.items.map(i => {
         if (i.masterItemId === item.masterItemId) {
-          return { ...i, imageUri: savedUri, updatedAt: Date.now() };
+          return { ...i, imageUri: savedUri };
         }
         return i;
       });
@@ -125,37 +113,49 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const handleCompleteShopping = async () => {
     if (!list) return;
 
-    // Calculate total
-    let total = 0;
-    const sessionItems = list.items.map(item => {
+    // Calculate estimated total (all items in list)
+    let estimated = 0;
+    // Calculate actual total (only checked items)
+    let actual = 0;
+    
+    list.items.forEach(item => {
       const price = itemPrices[item.masterItemId] || item.lastPrice;
-      total += price;
-      return {
-        masterItemId: item.masterItemId,
-        name: item.name,
-        price: price,
-        checked: checkedItems[item.masterItemId] || false
-      };
+      estimated += price;
+      if (checkedItems[item.masterItemId]) {
+        actual += price;
+      }
     });
 
-    const session: ShoppingSession = {
-      id: Date.now().toString(),
-      listId: list.id,
-      listName: list.name,
-      date: Date.now(),
-      total,
-      receiptImageUri: receiptImage || undefined,
-      items: sessionItems
-    };
-
-    await ShoppingListStorage.saveSession(session);
-    
-    Alert.alert(
-      'Shopping Complete!',
-      `Total: $${total.toFixed(2)}\nSession saved to history.`,
-      [{ text: 'OK', onPress: () => navigation.navigate('Welcome') }]
-    );
+    setEstimatedTotal(estimated);
+    setActualTotal(actual);
+    setActualPaid(actual.toFixed(2));
+    setCompletionModalVisible(true);
   };
+
+  const handleSaveSession = async () => {
+  if (!list) return;
+
+  const paidAmount = parseFloat(actualPaid) || actualTotal;
+
+  const session: ShoppingSession = {
+    id: Date.now().toString(),
+    listId: list.id,
+    listName: list.name,
+    date: Date.now(),
+    total: paidAmount, // Use the paid amount
+    calculatedTotal: actualTotal, // Store calculated total for reference
+    receiptImageUri: receiptImage || undefined,
+    items: list.items.map(item => ({
+      masterItemId: item.masterItemId,
+      name: item.name,
+      price: itemPrices[item.masterItemId] || item.lastPrice,
+      checked: checkedItems[item.masterItemId] || false
+    }))
+  };
+  
+  await ShoppingListStorage.saveSession(session);
+  navigation.navigate('Welcome');
+};
 
   const getTotalSoFar = () => {
     let total = 0;
@@ -229,9 +229,9 @@ export default function ActiveListScreen({ route, navigation }: any) {
         </View>
         <TouchableOpacity
           style={styles.completeButton}
-          onPress={() => setCompletionModalVisible(true)}
+          onPress={handleCompleteShopping}
         >
-          <Text style={styles.completeButtonText}>Complete</Text>
+          <Text style={styles.submitButtonText}>Complete</Text>
         </TouchableOpacity>
       </View>
 
@@ -291,54 +291,93 @@ export default function ActiveListScreen({ route, navigation }: any) {
 
       {/* Completion Modal */}
       <Modal
-        animationType="slide"
-        transparent={true}
-        visible={completionModalVisible}
-        onRequestClose={() => setCompletionModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Complete Shopping</Text>
-            
-            <View style={styles.summaryContainer}>
-              <Text style={styles.summaryText}>
-                Items checked: {checkedCount} / {list.items.length}
-              </Text>
-              <Text style={styles.summaryText}>
-                Total: ${totalSoFar.toFixed(2)}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.receiptButton}
-              onPress={handleTakeReceiptPhoto}
-            >
-              <Text style={styles.receiptButtonText}>
-                {receiptImage ? '📸 Retake Receipt Photo' : '📷 Take Receipt Photo'}
+  animationType="slide"
+  transparent={true}
+  visible={completionModalVisible}
+  onRequestClose={() => setCompletionModalVisible(false)}
+>
+  <View style={styles.modalContainer}>
+    <View style={styles.modalContent}>
+      <Text style={styles.modalTitle}>Complete Shopping</Text>
+      
+      <View style={styles.summaryContainer}>
+        {/* Estimated Total (read-only) */}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Estimated Total:</Text>
+          <Text style={styles.totalValue}>${estimatedTotal.toFixed(2)}</Text>
+        </View>
+        
+        {/* Actual Paid (editable) */}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Actual Paid:</Text>
+          {editingActual ? (
+            <TextInput
+              style={styles.paidInput}
+              value={actualPaid}
+              onChangeText={setActualPaid}
+              keyboardType="decimal-pad"
+              autoFocus
+              onBlur={() => setEditingActual(false)}
+              onSubmitEditing={() => setEditingActual(false)}
+            />
+          ) : (
+            <TouchableOpacity onPress={() => setEditingActual(true)}>
+              <Text style={[styles.totalValue, styles.actualPaidText]}>
+                ${parseFloat(actualPaid || '0').toFixed(2)} ✎
               </Text>
             </TouchableOpacity>
-
-            {receiptImage && (
-              <Image source={{ uri: receiptImage }} style={styles.receiptPreview} />
-            )}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setCompletionModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Continue Shopping</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.completeButton]}
-                onPress={handleCompleteShopping}
-              >
-                <Text style={styles.completeButtonText}>Finish & Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          )}
         </View>
-      </Modal>
+        
+        {/* Difference */}
+        <View style={[styles.totalRow, styles.differenceRow]}>
+          <Text style={styles.totalLabel}>Difference:</Text>
+          <Text style={[
+            styles.totalValue,
+            parseFloat(actualPaid || '0') <= estimatedTotal ? styles.savings : styles.overspend
+          ]}>
+            {parseFloat(actualPaid || '0') <= estimatedTotal ? '-' : '+'}$
+            {Math.abs(estimatedTotal - parseFloat(actualPaid || '0')).toFixed(2)}
+          </Text>
+        </View>
+        
+        <Text style={styles.itemSummary}>
+          {checkedCount} of {list.items.length} items purchased
+        </Text>
+      </View>
+
+      {/* Receipt Section */}
+      <TouchableOpacity
+        style={styles.receiptButton}
+        onPress={handleTakeReceiptPhoto}
+      >
+        <Text style={styles.receiptButtonText}>
+          {receiptImage ? '📸 Retake Receipt Photo' : '📷 Take Receipt Photo'}
+        </Text>
+      </TouchableOpacity>
+
+      {receiptImage && (
+        <Image source={{ uri: receiptImage }} style={styles.receiptPreview} />
+      )}
+
+      {/* Action Buttons */}
+      <View style={styles.modalButtons}>
+        <TouchableOpacity
+          style={[styles.modalButton, styles.cancelButton]}
+          onPress={() => setCompletionModalVisible(false)}
+        >
+          <Text style={styles.cancelButtonText}>Continue Shopping</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modalButton, styles.completeButton]}
+          onPress={handleSaveSession}
+        >
+          <Text style={styles.completeButtonText}>Finish & Save</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 }
@@ -366,19 +405,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  completeButton: {
+  headerCompleteButton: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
   },
-  completeButtonText: {
+  headerCompleteButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
   listContainer: {
     padding: 16,
   },
+  paidInput: {
+  borderWidth: 1,
+  borderColor: '#007AFF',
+  borderRadius: 4,
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  fontSize: 18,
+  fontWeight: '600',
+  color: '#007AFF',
+  minWidth: 100,
+  textAlign: 'right',
+},
+actualPaidText: {
+  color: '#007AFF',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+},
   itemContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -495,11 +551,18 @@ const styles = StyleSheet.create({
   submitButton: {
     backgroundColor: '#007AFF',
   },
+  completeButton: {
+    backgroundColor: '#4CAF50',
+  },
   cancelButtonText: {
     color: '#666',
     fontWeight: '600',
   },
   submitButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  completeButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
@@ -509,9 +572,42 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
   },
-  summaryText: {
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  totalLabel: {
     fontSize: 16,
-    marginBottom: 4,
+    color: '#666',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  actualTotal: {
+    color: '#007AFF',
+    fontSize: 20,
+  },
+  differenceRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  savings: {
+    color: '#4CAF50',
+  },
+  overspend: {
+    color: '#ff3b30',
+  },
+  itemSummary: {
+    textAlign: 'center',
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   receiptButton: {
     backgroundColor: '#f0f0f0',

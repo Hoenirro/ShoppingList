@@ -47,22 +47,22 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
   };
 
   const handleSave = async () => {
-    if (isSaving) return;
-    
-    if (!name.trim() || !brand.trim() || !price.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
+  if (isSaving) return;
+  
+  if (!name.trim() || !brand.trim() || !price.trim()) {
+    Alert.alert('Error', 'Please fill in all fields');
+    return;
+  }
 
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum < 0) {
-      Alert.alert('Error', 'Please enter a valid price');
-      return;
-    }
+  const priceNum = parseFloat(price);
+  if (isNaN(priceNum) || priceNum < 0) {
+    Alert.alert('Error', 'Please enter a valid price');
+    return;
+  }
 
-    setIsSaving(true);
+  setIsSaving(true);
 
-    try {
+  try {
     const now = Date.now();
     const masterItem: MasterItem = {
       id: itemId || Date.now().toString(),
@@ -70,6 +70,10 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
       brand: brand.trim(),
       defaultPrice: priceNum,
       averagePrice: priceNum,
+      priceHistory: [{  // Initialize priceHistory array!
+        price: priceNum,
+        date: now
+      }],
       imageUri: imageUri || undefined,
       createdAt: now,
       updatedAt: now,
@@ -77,34 +81,18 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
 
     await ShoppingListStorage.saveMasterItem(masterItem);
     
-    // Check if we need to return to selection screen
     if (route.params?.returnTo === 'SelectMasterItem' && route.params?.listId) {
-      // Go back to selection screen
       navigation.navigate('SelectMasterItem', { listId: route.params.listId });
     } else {
-      // Normal return
       navigation.goBack();
     }
-      
-      Alert.alert('Success', 'Item saved to master catalog', [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            if (returnTo === 'ItemManager') {
-              navigation.navigate('ItemManager');
-            } else {
-              navigation.goBack();
-            }
-          }
-        }
-      ]);
-    } catch (error) {
-      console.error('Error saving master item:', error);
-      Alert.alert('Error', 'Failed to save item');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  } catch (error) {
+    console.error('Error saving master item:', error);
+    Alert.alert('Error', 'Failed to save item');
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   return (
     <ScrollView style={styles.container}>

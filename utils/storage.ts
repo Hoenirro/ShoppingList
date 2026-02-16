@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { ShoppingList, ShoppingListItem, MasterItem, ShoppingSession } from '../types';
+import { ShoppingList, ShoppingListItem, MasterItem, ShoppingSession, PriceRecord } from '../types';
 
 // Use the new Paths API for base directories
 const { Paths } = FileSystem;
@@ -26,6 +26,42 @@ export class ShoppingListStorage {
     } catch (error) {
       console.error(`Error creating directory ${dir.uri}:`, error);
     }
+  }
+}
+
+static async addPriceToHistory(masterItemId: string, price: number, listId?: string, listName?: string, receiptImageUri?: string): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) return;
+
+    const item = items[itemIndex];
+    
+    // Add new price record
+    const newRecord: PriceRecord = {
+      price,
+      date: Date.now(),
+      listId,
+      listName,
+      receiptImageUri
+    };
+    
+    item.priceHistory.push(newRecord);
+    
+    // Recalculate average
+    const total = item.priceHistory.reduce((sum, record) => sum + record.price, 0);
+    item.averagePrice = total / item.priceHistory.length;
+    
+    // Update default price to latest
+    item.defaultPrice = price;
+    item.updatedAt = Date.now();
+    
+    // Save the updated item
+    await this.saveMasterItem(item);
+  } catch (error) {
+    console.error('Error adding price to history:', error);
+    throw error;
   }
 }
 
@@ -94,6 +130,7 @@ static async addMasterItemToList(listId: string, masterItemId: string): Promise<
     lastPrice: masterItem.defaultPrice,
     averagePrice: masterItem.averagePrice,
     imageUri: masterItem.imageUri,
+    priceAtAdd: masterItem.defaultPrice,
     addedAt: Date.now()
   };
 
