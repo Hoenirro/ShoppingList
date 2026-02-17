@@ -54,15 +54,39 @@ export interface ShoppingSession {
   }[];
 }
 
+export interface ActiveSession {
+  id: string;
+  listId: string;
+  listName: string;
+  startTime: number;
+  items: {
+    masterItemId: string;
+    name: string;
+    brand: string;
+    lastPrice: number;
+    checked: boolean;
+    price?: number;
+    imageUri?: string;
+  }[];
+  checkedItems: {
+    [masterItemId: string]: {
+      checked: boolean;
+      price?: number;
+      checkedAt: number;
+    };
+  };
+  receiptImageUri?: string;
+}
+
 export type RootStackParamList = {
   Welcome: undefined;
   ItemManager: undefined;
   ShoppingList: { listId: string };
   ActiveList: { listId: string };
-  SelectMasterItem: { listId: string };
+  SelectMasterItem: { listId: string; onGoBack?: () => void };
   EditMasterItem: { itemId?: string; returnTo?: string; listId?: string };
   EditListItem: { listId: string; listItemId?: string; masterItemId?: string };
-  PriceHistory: { masterItemId: string; itemName: string }; // New screen
+  PriceHistory: { masterItemId: string; itemName: string };
   History: undefined;
   SessionDetails: { sessionId: string };
 };

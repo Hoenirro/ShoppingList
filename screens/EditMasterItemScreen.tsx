@@ -22,10 +22,14 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (itemId) {
-      loadItem();
-    }
-  }, [itemId]);
+  navigation.setOptions({
+    headerLeft: () => (
+      <TouchableOpacity onPress={() => navigation.goBack()}>
+        <Text style={{ color: '#007AFF', marginLeft: 16 }}>Cancel</Text>
+      </TouchableOpacity>
+    ),
+  });
+}, [navigation]);
 
   const loadItem = async () => {
     const items = await ShoppingListStorage.getAllMasterItems();
@@ -70,7 +74,7 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
       brand: brand.trim(),
       defaultPrice: priceNum,
       averagePrice: priceNum,
-      priceHistory: [{  // Initialize priceHistory array!
+      priceHistory: [{
         price: priceNum,
         date: now
       }],
@@ -81,8 +85,10 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
 
     await ShoppingListStorage.saveMasterItem(masterItem);
     
+    // Check where to return to
     if (route.params?.returnTo === 'SelectMasterItem' && route.params?.listId) {
-      navigation.navigate('SelectMasterItem', { listId: route.params.listId });
+      // Go back to SelectMasterItem (which will refresh automatically via useFocusEffect)
+      navigation.goBack();
     } else {
       navigation.goBack();
     }

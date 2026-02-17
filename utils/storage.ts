@@ -1,7 +1,7 @@
 // utils/storage.ts
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { ShoppingList, ShoppingListItem, ShoppingSession, MasterItem, PriceRecord } from '../types';
+import { ShoppingList, ShoppingListItem, ShoppingSession, MasterItem, PriceRecord, ActiveSession } from '../types';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 // Use the new Paths API for base directories
@@ -334,6 +334,41 @@ export class ShoppingListStorage {
       throw error;
     }
   }
+
+  static async saveActiveSession(session: ActiveSession): Promise<void> {
+  try {
+    const file = new FileSystem.File(Paths.document, 'active_session.json');
+    await file.write(JSON.stringify(session, null, 2));
+  } catch (error) {
+    console.error('Error saving active session:', error);
+    throw error;
+  }
+}
+
+static async getActiveSession(): Promise<ActiveSession | null> {
+  try {
+    const file = new FileSystem.File(Paths.document, 'active_session.json');
+    if (!file.exists) {
+      return null;
+    }
+    const content = await file.text();
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Error reading active session:', error);
+    return null;
+  }
+}
+
+static async clearActiveSession(): Promise<void> {
+  try {
+    const file = new FileSystem.File(Paths.document, 'active_session.json');
+    if (file.exists) {
+      file.delete();
+    }
+  } catch (error) {
+    console.error('Error clearing active session:', error);
+  }
+}
 
   // ============= IMAGE METHODS =============
 

@@ -115,7 +115,7 @@ export default function App() {
             name="EditMasterItem" 
             component={EditMasterItemScreen} 
             options={{ 
-              title: 'Edit Master Item',
+              title: 'Create New Item',
               presentation: 'modal',
             }}
           />

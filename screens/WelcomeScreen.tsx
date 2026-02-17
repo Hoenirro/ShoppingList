@@ -12,18 +12,25 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
-import { ShoppingList } from '../types';
+import { ShoppingList, ActiveSession } from '../types';
 
 export default function WelcomeScreen({ navigation }: any) {
   const [lists, setLists] = useState<ShoppingList[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       loadLists();
+      checkActiveSession();
     }, [])
   );
+
+  const checkActiveSession = async () => {
+    const session = await ShoppingListStorage.getActiveSession();
+    setActiveSession(session);
+  };
 
   const loadLists = async () => {
     const loadedLists = await ShoppingListStorage.getAllLists();
@@ -112,7 +119,29 @@ export default function WelcomeScreen({ navigation }: any) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         ListHeaderComponent={
-          <Text style={styles.sectionTitle}>Your Shopping Lists</Text>
+          <>
+            {/* Active Session Card - Placed here, outside of renderList */}
+            {activeSession && (
+              <TouchableOpacity
+                style={styles.activeSessionCard}
+                onPress={() => navigation.navigate('ActiveList', { listId: activeSession.listId })}
+              >
+                <View style={styles.activeSessionHeader}>
+                  <Text style={styles.activeSessionTitle}>🛒 Active Shopping</Text>
+                  <Text style={styles.activeSessionName}>{activeSession.listName}</Text>
+                </View>
+                <View style={styles.activeSessionProgress}>
+                  <Text style={styles.activeSessionStats}>
+                    {Object.keys(activeSession.checkedItems).length} / {activeSession.items.length} items
+                  </Text>
+                  <Text style={styles.activeSessionResume}>Tap to resume →</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            
+            {/* Section Title */}
+            <Text style={styles.sectionTitle}>Your Shopping Lists</Text>
+          </>
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -197,6 +226,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
+    marginTop: 8,
     color: '#333',
   },
   listContainer: {
@@ -260,6 +290,48 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#fff',
     fontWeight: '600',
+  },
+  // Active Session Styles
+  activeSessionCard: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  activeSessionHeader: {
+    marginBottom: 8,
+  },
+  activeSessionTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    opacity: 0.9,
+    marginBottom: 4,
+  },
+  activeSessionName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  activeSessionProgress: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  activeSessionStats: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  activeSessionResume: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   emptyContainer: {
     alignItems: 'center',

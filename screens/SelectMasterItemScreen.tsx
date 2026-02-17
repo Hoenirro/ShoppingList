@@ -21,45 +21,106 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
   const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
 
   useFocusEffect(
-  useCallback(() => {
-    loadItems();
-    loadCurrentListItems();
-  }, [])
-);
+    useCallback(() => {
+      loadItems();
+      loadCurrentListItems();
+    }, [])
+  );
 
-const loadCurrentListItems = async () => {
-  const lists = await ShoppingListStorage.getAllLists();
-  const currentList = lists.find(l => l.id === listId);
-  if (currentList) {
-    const addedIds = new Set(currentList.items.map(item => item.masterItemId));
-    setAddedItemIds(addedIds);
-  }
-};
+  const loadCurrentListItems = async () => {
+    const lists = await ShoppingListStorage.getAllLists();
+    const currentList = lists.find(l => l.id === listId);
+    if (currentList) {
+      const addedIds = new Set(currentList.items.map(item => item.masterItemId));
+      setAddedItemIds(addedIds);
+    }
+  };
 
   const loadItems = async () => {
     const loadedItems = await ShoppingListStorage.getAllMasterItems();
     setItems(loadedItems);
   };
 
-  const handleSelectItem = async (item: MasterItem) => {
-  if (addedItemIds.has(item.id)) {
-    Alert.alert('Already Added', `${item.name} is already in this list`);
-    return;
-  }
+  const handleAddItem = async (item: MasterItem) => {
+    if (addedItemIds.has(item.id)) {
+      Alert.alert('Already Added', `${item.name} is already in this list`);
+      return;
+    }
+    
+    await ShoppingListStorage.addMasterItemToList(listId, item.id);
+    
+    // Update local state to show item as added
+    setAddedItemIds(prev => new Set(prev).add(item.id));
+    
+    // Notify parent to refresh if callback exists
+    if (route.params?.onGoBack) {
+      route.params.onGoBack();
+    }
+    loadItems();
+  };
 
-  await ShoppingListStorage.addMasterItemToList(listId, item.id);
-  setAddedItemIds(prev => new Set(prev).add(item.id));
-  Alert.alert('Success', `${item.name} added to list`, [
-    { text: 'OK' }
-  ]);
-};
+  const handleRemoveItem = async (item: MasterItem) => {
+    Alert.alert(
+      'Remove Item',
+      `Remove "${item.name}" from this shopping list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            // Get current list
+            const lists = await ShoppingListStorage.getAllLists();
+            const currentList = lists.find(l => l.id === listId);
+            
+            if (currentList) {
+              // Filter out the item
+              const updatedItems = currentList.items.filter(
+                listItem => listItem.masterItemId !== item.id
+              );
+              
+              const updatedList = {
+                ...currentList,
+                items: updatedItems,
+                updatedAt: Date.now(),
+              };
+              
+              await ShoppingListStorage.saveList(updatedList);
+              
+              // Update local state
+              setAddedItemIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(item.id);
+                return newSet;
+              });
+              
+              // Notify parent to refresh
+              if (route.params?.onGoBack) {
+                route.params.onGoBack();
+              }
+              loadItems();
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleCreateNew = () => {
     navigation.navigate('EditMasterItem', { 
       returnTo: 'SelectMasterItem',
-      listId: listId // Pass listId so we know where to return
+      listId: listId
     });
   };
+
+  useFocusEffect(
+  useCallback(() => {
+    // This will run every time the screen comes into focus
+    // Including when returning from EditMasterItem
+    loadItems();
+    loadCurrentListItems();
+  }, [])
+);
 
   const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -67,40 +128,51 @@ const loadCurrentListItems = async () => {
   );
 
   const renderItem = ({ item }: { item: MasterItem }) => {
-  const isAdded = addedItemIds.has(item.id);
-  
-  return (
-    <TouchableOpacity
-      style={[styles.itemContainer, isAdded && styles.disabledItem]}
-      onPress={() => handleSelectItem(item)}
-      disabled={isAdded}
-    >
-      {item.imageUri ? (
-        <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
-      ) : (
-        <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
-          <Text style={styles.placeholderText}>📷</Text>
+    const isAdded = addedItemIds.has(item.id);
+    
+    return (
+      <View style={[styles.itemContainer, isAdded && styles.addedItemContainer]}>
+        {/* Thumbnail */}
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
+        ) : (
+          <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
+            <Text style={styles.placeholderText}>📷</Text>
+          </View>
+        )}
+        
+        {/* Item Info */}
+        <View style={styles.itemInfo}>
+          <Text style={[styles.itemName, isAdded && styles.addedText]}>
+            {item.name}
+          </Text>
+          <Text style={[styles.itemBrand, isAdded && styles.addedText]}>
+            {item.brand}
+          </Text>
+          <Text style={[styles.itemPrice, isAdded && styles.addedText]}>
+            Default: ${item.defaultPrice.toFixed(2)}
+          </Text>
         </View>
-      )}
-      
-      <View style={styles.itemInfo}>
-        <Text style={[styles.itemName, isAdded && styles.disabledText]}>
-          {item.name}
-        </Text>
-        <Text style={[styles.itemBrand, isAdded && styles.disabledText]}>
-          {item.brand}
-        </Text>
-        <Text style={[styles.itemPrice, isAdded && styles.disabledText]}>
-          Default: ${item.defaultPrice.toFixed(2)}
-        </Text>
+        
+        {/* Action Button */}
+        {isAdded ? (
+          <TouchableOpacity
+            style={styles.removeIcon}
+            onPress={() => handleRemoveItem(item)}
+          >
+            <Text style={styles.removeIconText}>−</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.addIcon}
+            onPress={() => handleAddItem(item)}
+          >
+            <Text style={styles.addIconText}>+</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      
-      <View style={[styles.addIcon, isAdded && styles.addedIcon]}>
-        <Text style={styles.addIconText}>{isAdded ? '✓' : '+'}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-};
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -156,16 +228,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
-  disabledItem: {
-  opacity: 0.6,
-  backgroundColor: '#f8f8f8',
-},
-disabledText: {
-  color: '#999',
-},
-addedIcon: {
-  backgroundColor: '#999',
-},
   createButton: {
     backgroundColor: '#007AFF',
     padding: 12,
@@ -192,6 +254,11 @@ addedIcon: {
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  addedItemContainer: {
+    backgroundColor: '#f8f8f8',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   thumbnail: {
     width: 50,
@@ -225,6 +292,9 @@ addedIcon: {
     color: '#007AFF',
     fontWeight: '500',
   },
+  addedText: {
+    color: '#999',
+  },
   addIcon: {
     width: 40,
     height: 40,
@@ -234,6 +304,19 @@ addedIcon: {
     alignItems: 'center',
   },
   addIconText: {
+    fontSize: 24,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  removeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeIconText: {
     fontSize: 24,
     color: '#fff',
     fontWeight: '600',

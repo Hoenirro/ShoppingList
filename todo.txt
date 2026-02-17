@@ -1,0 +1,9 @@
+- fix the edit button in the master item screen
+- add the possibility of changing brands
+- add place of purchase (optional) when completing a list
+- make the lists shareable
+
+##### online functionality ####
+- user login
+- shopping group
+- manage the same shopping list
