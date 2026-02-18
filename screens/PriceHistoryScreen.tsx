@@ -1,4 +1,4 @@
-// screens/PriceHistoryScreen.tsx - Enhanced version
+// screens/PriceHistoryScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,6 +14,7 @@ import { MasterItem, PriceRecord } from '../types';
 export default function PriceHistoryScreen({ route, navigation }: any) {
   const { masterItemId, itemName } = route.params;
   const [item, setItem] = useState<MasterItem | null>(null);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
   useEffect(() => {
     loadItem();
@@ -33,29 +34,70 @@ export default function PriceHistoryScreen({ route, navigation }: any) {
     );
   }
 
-  // Calculate statistics
-  const prices = item.priceHistory.map(p => p.price);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const averagePrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+  const selectedVariant = item.variants[selectedVariantIndex];
+  
+  if (!selectedVariant) {
+    return (
+      <View style={styles.container}>
+        <Text>No variants found</Text>
+      </View>
+    );
+  }
+
+  // Calculate statistics for selected variant
+  const prices = selectedVariant.priceHistory?.map(p => p.price) || [];
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+  const averagePrice = prices.length > 0 
+    ? prices.reduce((a, b) => a + b, 0) / prices.length 
+    : 0;
   
   // Get last purchase
-  const lastPurchase = item.priceHistory[item.priceHistory.length - 1];
+  const lastPurchase = selectedVariant.priceHistory?.[selectedVariant.priceHistory.length - 1];
 
   // Sort history by date (newest first)
-  const sortedHistory = [...item.priceHistory].sort((a, b) => b.date - a.date);
+  const sortedHistory = [...(selectedVariant.priceHistory || [])].sort((a, b) => b.date - a.date);
+
+  const renderVariantSelector = () => {
+    if (item.variants.length <= 1) return null;
+
+    return (
+      <View style={styles.variantSelector}>
+        <Text style={styles.variantLabel}>Select Brand:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.variantScroll}>
+          {item.variants.map((variant, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.variantChip,
+                selectedVariantIndex === index && styles.selectedVariantChip
+              ]}
+              onPress={() => setSelectedVariantIndex(index)}
+            >
+              <Text style={[
+                styles.variantChipText,
+                selectedVariantIndex === index && styles.selectedVariantChipText
+              ]}>
+                {variant.brand}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
+        {renderVariantSelector()}
       </View>
 
       {/* Last Purchase Section */}
       {lastPurchase && (
         <View style={styles.lastPurchaseContainer}>
-          <Text style={styles.sectionTitle}>Last Purchase</Text>
+          <Text style={styles.sectionTitle}>Last Purchase - {selectedVariant.brand}</Text>
           <View style={styles.lastPurchaseCard}>
             <View style={styles.lastPurchaseRow}>
               <Text style={styles.lastPurchaseLabel}>Date:</Text>
@@ -67,7 +109,7 @@ export default function PriceHistoryScreen({ route, navigation }: any) {
             <View style={styles.lastPurchaseRow}>
               <Text style={styles.lastPurchaseLabel}>Price:</Text>
               <Text style={styles.lastPurchasePrice}>
-                ${lastPurchase.price.toFixed(2)}
+                ${(lastPurchase.price || 0).toFixed(2)}
               </Text>
             </View>
             {lastPurchase.listName && (
@@ -110,7 +152,7 @@ export default function PriceHistoryScreen({ route, navigation }: any) {
 
       {/* Full History */}
       <View style={styles.historyContainer}>
-        <Text style={styles.sectionTitle}>Price History</Text>
+        <Text style={styles.sectionTitle}>Price History - {selectedVariant.brand}</Text>
         
         {sortedHistory.length === 0 ? (
           <Text style={styles.noHistory}>No price history yet</Text>
@@ -130,7 +172,7 @@ export default function PriceHistoryScreen({ route, navigation }: any) {
               </View>
               
               <View style={styles.historyRight}>
-                <Text style={styles.historyPrice}>${record.price.toFixed(2)}</Text>
+                <Text style={styles.historyPrice}>${(record.price || 0).toFixed(2)}</Text>
                 {record.receiptImageUri && (
                   <TouchableOpacity
                     onPress={() => {
@@ -167,11 +209,35 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 12,
   },
-  itemBrand: {
-    fontSize: 16,
+  variantSelector: {
+    width: '100%',
+  },
+  variantLabel: {
+    fontSize: 14,
     color: '#666',
+    marginBottom: 8,
+  },
+  variantScroll: {
+    flexDirection: 'row',
+  },
+  variantChip: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  selectedVariantChip: {
+    backgroundColor: '#007AFF',
+  },
+  variantChipText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  selectedVariantChipText: {
+    color: '#fff',
   },
   sectionTitle: {
     fontSize: 18,

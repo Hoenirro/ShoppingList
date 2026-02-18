@@ -1,5 +1,5 @@
 - fix the edit button in the master item screen [done]
-- add the possibility of changing brands
+- add the possibility of changing brands [done]
 - add place of purchase (optional) when completing a list
 - make the lists shareable
 

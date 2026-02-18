@@ -2,18 +2,25 @@
 export interface PriceRecord {
   price: number;
   date: number;
-  listId?: string;        // Which shopping list this price came from
-  listName?: string;       // Name of the list for context
-  receiptImageUri?: string; // Optional receipt image for this purchase
+  listId?: string;
+  listName?: string;
+  receiptImageUri?: string;
 }
 
 export interface MasterItem {
   id: string;
-  name: string;
+  name: string; // Product name (e.g., "Milk")
+  variants: BrandVariant[]; // Array of brand variants
+  defaultVariantIndex: number; // Which variant to show by default
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface BrandVariant {
   brand: string;
-  defaultPrice: number;     // Last price or user-set default
-  averagePrice: number;      // Calculated from price history
-  priceHistory: PriceRecord[]; // Array of all prices with dates
+  defaultPrice: number;
+  averagePrice: number;
+  priceHistory: PriceRecord[];
   imageUri?: string;
   createdAt: number;
   updatedAt: number;
@@ -21,12 +28,13 @@ export interface MasterItem {
 
 export interface ShoppingListItem {
   masterItemId: string;
-  name: string;              // Snapshot at time of adding
-  brand: string;             // Snapshot at time of adding
-  lastPrice: number;         // Last price paid (from master item)
-  averagePrice: number;      // Average price (from master item)
-  priceAtAdd: number;        // Price when added to this list (for reference)
-  imageUri?: string;         // Can have custom image for this list
+  variantIndex: number; // Which brand variant this is
+  name: string; // Snapshot of product name
+  brand: string; // Snapshot of brand name
+  lastPrice: number;
+  averagePrice: number;
+  priceAtAdd: number;
+  imageUri?: string; // Snapshot of brand image
   addedAt: number;
 }
 
@@ -43,12 +51,14 @@ export interface ShoppingSession {
   listId: string;
   listName: string;
   date: number;
-  total: number;           // Actual paid amount (editable)
-  calculatedTotal?: number; // Calculated from items (for reference)
+  total: number;
+  calculatedTotal?: number;
   receiptImageUri?: string;
   items: {
     masterItemId: string;
+    variantIndex: number;
     name: string;
+    brand: string;
     price: number;
     checked: boolean;
   }[];
@@ -61,6 +71,7 @@ export interface ActiveSession {
   startTime: number;
   items: {
     masterItemId: string;
+    variantIndex: number;
     name: string;
     brand: string;
     lastPrice: number;
@@ -69,7 +80,7 @@ export interface ActiveSession {
     imageUri?: string;
   }[];
   checkedItems: {
-    [masterItemId: string]: {
+    [key: string]: { // key = `${masterItemId}_${variantIndex}`
       checked: boolean;
       price?: number;
       checkedAt: number;

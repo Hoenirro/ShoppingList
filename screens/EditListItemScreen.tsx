@@ -14,10 +14,11 @@ import { ShoppingListStorage } from '../utils/storage';
 import { ShoppingList, ShoppingListItem, MasterItem } from '../types';
 
 export default function EditListItemScreen({ route, navigation }: any) {
-  const { listId, listItemId, masterItemId } = route.params;
+  const { listId, listItemId, masterItemId, variantIndex = 0 } = route.params;
   const [list, setList] = useState<ShoppingList | null>(null);
   const [listItem, setListItem] = useState<ShoppingListItem | null>(null);
   const [masterItem, setMasterItem] = useState<MasterItem | null>(null);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(variantIndex);
   
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -36,8 +37,10 @@ export default function EditListItemScreen({ route, navigation }: any) {
     setList(currentList || null);
 
     if (currentList && listItemId) {
-      // Editing existing list item
-      const item = currentList.items.find(i => i.masterItemId === listItemId);
+      // Editing existing list item - find by composite key
+      const item = currentList.items.find(
+        i => i.masterItemId === listItemId && i.variantIndex === selectedVariantIndex
+      );
       if (item) {
         setListItem(item);
         setName(item.name);
@@ -51,10 +54,14 @@ export default function EditListItemScreen({ route, navigation }: any) {
       const master = masterItems.find(i => i.id === masterItemId);
       if (master) {
         setMasterItem(master);
+        
+        // Use the selected variant or default to first variant
+        const variant = master.variants[selectedVariantIndex] || master.variants[0];
         setName(master.name);
-        setBrand(master.brand);
-        setPrice(master.defaultPrice.toString());
-        setImageUri(master.imageUri || '');
+        setBrand(variant.brand);
+        setPrice(variant.defaultPrice.toString());
+        setImageUri(variant.imageUri || '');
+        setSelectedVariantIndex(master.variants.indexOf(variant));
       }
     }
   };
@@ -88,7 +95,9 @@ export default function EditListItemScreen({ route, navigation }: any) {
 
       if (listItem) {
         // Update existing list item
-        const index = updatedItems.findIndex(i => i.masterItemId === listItem.masterItemId);
+        const index = updatedItems.findIndex(
+          i => i.masterItemId === listItem.masterItemId && i.variantIndex === listItem.variantIndex
+        );
         if (index !== -1) {
           updatedItems[index] = {
             ...listItem,
@@ -100,14 +109,17 @@ export default function EditListItemScreen({ route, navigation }: any) {
         }
       } else if (masterItem) {
         // Add new item to list from master catalog
+        const variant = masterItem.variants[selectedVariantIndex];
+        
         const newListItem: ShoppingListItem = {
           masterItemId: masterItem.id,
+          variantIndex: selectedVariantIndex,
           name: name.trim(),
           brand: brand.trim(),
           lastPrice: priceNum,
           priceAtAdd: priceNum,
-          averagePrice: masterItem.averagePrice,
-          imageUri: imageUri || masterItem.imageUri,
+          averagePrice: variant.averagePrice,
+          imageUri: imageUri || variant.imageUri,
           addedAt: Date.now(),
         };
         updatedItems.push(newListItem);
@@ -135,14 +147,16 @@ export default function EditListItemScreen({ route, navigation }: any) {
 
     Alert.alert(
       'Remove Item',
-      `Remove "${listItem.name}" from this shopping list?`,
+      `Remove "${listItem.name} (${listItem.brand})" from this shopping list?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            const updatedItems = list.items.filter(i => i.masterItemId !== listItem.masterItemId);
+            const updatedItems = list.items.filter(
+              i => !(i.masterItemId === listItem.masterItemId && i.variantIndex === listItem.variantIndex)
+            );
             const updatedList = {
               ...list,
               items: updatedItems,
@@ -153,6 +167,41 @@ export default function EditListItemScreen({ route, navigation }: any) {
           },
         },
       ]
+    );
+  };
+
+  // If we're adding from master item and there are multiple variants, show variant selector
+  const renderVariantSelector = () => {
+    if (!masterItem || masterItem.variants.length <= 1) return null;
+
+    return (
+      <View style={styles.variantContainer}>
+        <Text style={styles.label}>Select Brand Variant</Text>
+        <View style={styles.variantButtons}>
+          {masterItem.variants.map((variant, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.variantButton,
+                selectedVariantIndex === index && styles.selectedVariantButton
+              ]}
+              onPress={() => {
+                setSelectedVariantIndex(index);
+                setBrand(variant.brand);
+                setPrice(variant.defaultPrice.toString());
+                setImageUri(variant.imageUri || '');
+              }}
+            >
+              <Text style={[
+                styles.variantButtonText,
+                selectedVariantIndex === index && styles.selectedVariantButtonText
+              ]}>
+                {variant.brand}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
     );
   };
 
@@ -169,6 +218,8 @@ export default function EditListItemScreen({ route, navigation }: any) {
             </View>
           )}
         </TouchableOpacity>
+
+        {renderVariantSelector()}
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Item Name *</Text>
@@ -267,6 +318,32 @@ const styles = StyleSheet.create({
   imagePlaceholderLabel: {
     fontSize: 14,
     color: '#666',
+  },
+  variantContainer: {
+    marginBottom: 16,
+  },
+  variantButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  variantButton: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  selectedVariantButton: {
+    backgroundColor: '#007AFF',
+  },
+  variantButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  selectedVariantButtonText: {
+    color: '#fff',
   },
   inputGroup: {
     marginBottom: 16,

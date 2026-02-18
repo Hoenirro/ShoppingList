@@ -37,90 +37,102 @@ export default function ItemManagerScreen({ navigation }: any) {
   };
 
   const handleDeleteItem = (item: MasterItem) => {
-  Alert.alert(
-    'Delete Item',
-    `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will NOT remove it from existing shopping lists.`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await ShoppingListStorage.deleteMasterItem(item.id);
-          loadItems();
+    Alert.alert(
+      'Delete Item',
+      `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will remove ALL brand variants.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await ShoppingListStorage.deleteMasterItem(item.id);
+            loadItems();
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.brand.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = items.filter(item => {
+    const matchesName = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBrand = item.variants.some(v => 
+      v.brand.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return matchesName || matchesBrand;
+  });
 
-  const renderItem = ({ item }: { item: MasterItem }) => (
-    <View style={styles.itemContainer}>
-    <TouchableOpacity
-      onPress={() => navigation.navigate('PriceHistory', { 
-        masterItemId: item.id, 
-        itemName: item.name 
-      })}
-    >
-      {item.imageUri ? (
-        <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
-      ) : (
-        <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
-          <Text style={styles.placeholderText}>📷</Text>
+  const renderItem = ({ item }: { item: MasterItem }) => {
+    const defaultVariant = item.variants[item.defaultVariantIndex || 0];
+    const brandCount = item.variants.length;
+    const lowestPrice = Math.min(...item.variants.map(v => v.defaultPrice || 0));
+    const avgPrice = item.variants.reduce((sum, v) => sum + (v.averagePrice || 0), 0) / brandCount;
+
+    return (
+      <View style={styles.itemContainer}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('PriceHistory', { 
+            masterItemId: item.id, 
+            itemName: item.name 
+          })}
+        >
+          {defaultVariant?.imageUri ? (
+            <Image source={{ uri: defaultVariant.imageUri }} style={styles.thumbnail} />
+          ) : (
+            <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
+              <Text style={styles.placeholderText}>📷</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemBrand}>
+            {brandCount} brand{brandCount !== 1 ? 's' : ''}
+          </Text>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceLabel}>From: </Text>
+            <Text style={styles.priceValue}>${lowestPrice.toFixed(2)}</Text>
+            <Text style={styles.priceLabel}>  Avg: </Text>
+            <Text style={styles.priceValue}>${avgPrice.toFixed(2)}</Text>
+          </View>
         </View>
-      )}
-    </TouchableOpacity>
-      
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Default: </Text>
-          <Text style={styles.priceValue}>${item.defaultPrice.toFixed(2)}</Text>
-          <Text style={styles.priceLabel}>  Avg: </Text>
-          <Text style={styles.priceValue}>${item.averagePrice.toFixed(2)}</Text>
+        
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.historyButton]}
+            onPress={() => navigation.navigate('PriceHistory', { 
+              masterItemId: item.id, 
+              itemName: item.name 
+            })}
+          >
+            <Text style={styles.historyButtonText}>📊</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.editButton]}
+            onPress={() => handleEditItem(item)}
+          >
+            <Text style={styles.editButtonText}>✎</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteItem(item)}
+          >
+            <Text style={styles.deleteButtonText}>🗑</Text>
+          </TouchableOpacity>
         </View>
       </View>
-      
-      <View style={styles.actionButtons}>
-  <TouchableOpacity
-    style={[styles.actionButton, styles.historyButton]}
-    onPress={() => navigation.navigate('PriceHistory', { 
-      masterItemId: item.id, 
-      itemName: item.name 
-    })}
-  >
-    <Text style={styles.historyButtonText}>📊</Text>
-  </TouchableOpacity>
-  
-  <TouchableOpacity
-    style={[styles.actionButton, styles.editButton]}
-    onPress={() => handleEditItem(item)}
-  >
-    <Text style={styles.editButtonText}>✎</Text>
-  </TouchableOpacity>
-  
-  <TouchableOpacity
-    style={[styles.actionButton, styles.deleteButton]}
-    onPress={() => handleDeleteItem(item)}
-  >
-    <Text style={styles.deleteButtonText}>🗑</Text>
-  </TouchableOpacity>
-</View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search items..."
+          placeholder="Search items or brands..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor="#999"
@@ -204,13 +216,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
   },
-  historyButton: {
-  backgroundColor: '#4CAF50',
-},
-historyButtonText: {
-  fontSize: 18,
-  color: '#fff',
-},
   placeholderThumbnail: {
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
@@ -256,6 +261,13 @@ historyButtonText: {
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  historyButton: {
+    backgroundColor: '#4CAF50',
+  },
+  historyButtonText: {
+    fontSize: 18,
+    color: '#fff',
   },
   editButton: {
     backgroundColor: '#f0f0f0',

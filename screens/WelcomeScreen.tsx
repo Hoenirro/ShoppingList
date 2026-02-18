@@ -122,22 +122,47 @@ export default function WelcomeScreen({ navigation }: any) {
           <>
             {/* Active Session Card - Placed here, outside of renderList */}
             {activeSession && (
-              <TouchableOpacity
-                style={styles.activeSessionCard}
-                onPress={() => navigation.navigate('ActiveList', { listId: activeSession.listId })}
-              >
-                <View style={styles.activeSessionHeader}>
-                  <Text style={styles.activeSessionTitle}>🛒 Active Shopping</Text>
-                  <Text style={styles.activeSessionName}>{activeSession.listName}</Text>
-                </View>
-                <View style={styles.activeSessionProgress}>
-                  <Text style={styles.activeSessionStats}>
-                    {Object.keys(activeSession.checkedItems).length} / {activeSession.items.length} items
-                  </Text>
-                  <Text style={styles.activeSessionResume}>Tap to resume →</Text>
-                </View>
-              </TouchableOpacity>
-            )}
+  <View style={styles.activeSessionWrapper}>
+    <TouchableOpacity
+      style={styles.activeSessionCard}
+      onPress={() => navigation.navigate('ActiveList', { listId: activeSession.listId })}
+    >
+      <View style={styles.activeSessionHeader}>
+        <Text style={styles.activeSessionTitle}>🛒 Active Shopping</Text>
+        <Text style={styles.activeSessionName}>{activeSession.listName}</Text>
+      </View>
+      <View style={styles.activeSessionProgress}>
+        <Text style={styles.activeSessionStats}>
+          {Object.keys(activeSession.checkedItems).length} / {activeSession.items.length} items
+        </Text>
+        <Text style={styles.activeSessionResume}>Tap to resume →</Text>
+      </View>
+    </TouchableOpacity>
+    
+    <TouchableOpacity
+      style={styles.clearActiveButton}
+      onPress={() => {
+        Alert.alert(
+          'Clear Active Shopping',
+          `Are you sure you want to cancel "${activeSession.listName}"?\n\nThis will discard all progress and not save to history.`,
+          [
+            { text: 'No', style: 'cancel' },
+            {
+              text: 'Yes, Cancel',
+              style: 'destructive',
+              onPress: async () => {
+                await ShoppingListStorage.clearActiveSession();
+                setActiveSession(null);
+              }
+            }
+          ]
+        );
+      }}
+    >
+      <Text style={styles.clearActiveButtonText}>✕ Cancel</Text>
+    </TouchableOpacity>
+  </View>
+)}
             
             {/* Section Title */}
             <Text style={styles.sectionTitle}>Your Shopping Lists</Text>
@@ -232,6 +257,24 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 16,
   },
+  activeSessionWrapper: {
+  marginBottom: 20,
+  position: 'relative',
+},
+clearActiveButton: {
+  position: 'absolute',
+  top: 8,
+  right: 8,
+  backgroundColor: 'rgba(255,255,255,0.3)',
+  paddingHorizontal: 12,
+  paddingVertical: 4,
+  borderRadius: 16,
+},
+clearActiveButtonText: {
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: '600',
+},
   listItem: {
     flexDirection: 'row',
     backgroundColor: '#fff',

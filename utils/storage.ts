@@ -1,7 +1,7 @@
 // utils/storage.ts
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { ShoppingList, ShoppingListItem, ShoppingSession, MasterItem, PriceRecord, ActiveSession } from '../types';
+import { ShoppingList, ShoppingListItem, ShoppingSession, MasterItem, PriceRecord, ActiveSession, BrandVariant } from '../types';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 // Use the new Paths API for base directories
@@ -29,6 +29,155 @@ export class ShoppingListStorage {
       }
     }
   }
+
+  static async addBrandVariant(masterItemId: string, variant: Omit<BrandVariant, 'createdAt' | 'updatedAt' | 'priceHistory'>): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) return;
+    
+    const item = items[itemIndex];
+    const now = Date.now();
+    
+    const newVariant: BrandVariant = {
+      ...variant,
+      priceHistory: [{
+        price: variant.defaultPrice,
+        date: now
+      }],
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    item.variants.push(newVariant);
+    item.updatedAt = now;
+    
+    await this.saveMasterItem(item);
+  } catch (error) {
+    console.error('Error adding brand variant:', error);
+    throw error;
+  }
+}
+
+static async updateBrandVariant(masterItemId: string, variantIndex: number, updates: Partial<BrandVariant>): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) return;
+    
+    const item = items[itemIndex];
+    if (variantIndex >= item.variants.length) return;
+    
+    const variant = item.variants[variantIndex];
+    const now = Date.now();
+    
+    // If price changed, add to price history
+    if (updates.defaultPrice && updates.defaultPrice !== variant.defaultPrice) {
+      variant.priceHistory.push({
+        price: updates.defaultPrice,
+        date: now
+      });
+      
+      // Recalculate average
+      const total = variant.priceHistory.reduce((sum, record) => sum + record.price, 0);
+      variant.averagePrice = total / variant.priceHistory.length;
+    }
+    
+    // Update other fields
+    if (updates.brand) variant.brand = updates.brand;
+    if (updates.imageUri !== undefined) variant.imageUri = updates.imageUri;
+    if (updates.defaultPrice) variant.defaultPrice = updates.defaultPrice;
+    
+    variant.updatedAt = now;
+    item.updatedAt = now;
+    
+    await this.saveMasterItem(item);
+  } catch (error) {
+    console.error('Error updating brand variant:', error);
+    throw error;
+  }
+}
+
+static async deleteBrandVariant(masterItemId: string, variantIndex: number): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) return;
+    
+    const item = items[itemIndex];
+    if (variantIndex >= item.variants.length) return;
+    
+    // Delete the variant's image if it exists
+    const variant = item.variants[variantIndex];
+    if (variant.imageUri) {
+      await this.deleteImageIfExists(variant.imageUri);
+    }
+    
+    // Remove the variant
+    item.variants.splice(variantIndex, 1);
+    
+    // Adjust default variant index if needed
+    if (item.defaultVariantIndex >= item.variants.length) {
+      item.defaultVariantIndex = Math.max(0, item.variants.length - 1);
+    }
+    
+    item.updatedAt = Date.now();
+    
+    await this.saveMasterItem(item);
+  } catch (error) {
+    console.error('Error deleting brand variant:', error);
+    throw error;
+  }
+}
+
+static async addPriceToVariantHistory(
+  masterItemId: string, 
+  variantIndex: number, 
+  price: number, 
+  listId?: string, 
+  listName?: string, 
+  receiptImageUri?: string
+): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) return;
+    
+    const item = items[itemIndex];
+    if (variantIndex >= item.variants.length) return;
+    
+    const variant = item.variants[variantIndex];
+    
+    // Add new price record
+    const newRecord: PriceRecord = {
+      price,
+      date: Date.now(),
+      listId,
+      listName,
+      receiptImageUri
+    };
+    
+    variant.priceHistory.push(newRecord);
+    
+    // Recalculate average
+    const total = variant.priceHistory.reduce((sum, record) => sum + record.price, 0);
+    variant.averagePrice = total / variant.priceHistory.length;
+    
+    // Update default price to latest
+    variant.defaultPrice = price;
+    variant.updatedAt = Date.now();
+    item.updatedAt = Date.now();
+    
+    await this.saveMasterItem(item);
+  } catch (error) {
+    console.error('Error adding price to variant history:', error);
+    throw error;
+  }
+}
 
   static async downsampleImage(uri: string, maxSize: number = 300): Promise<string> {
   try {
@@ -94,57 +243,70 @@ export class ShoppingListStorage {
   }
 
   static async deleteMasterItem(itemId: string): Promise<void> {
-    try {
-      // First get the item to get its image URI
-      const items = await this.getAllMasterItems();
-      const item = items.find(i => i.id === itemId);
-      
-      if (item?.imageUri) {
-        // Delete the associated image
-        await this.deleteImageIfExists(item.imageUri);
+  try {
+    // First get the item to get all variant images
+    const items = await this.getAllMasterItems();
+    const item = items.find(i => i.id === itemId);
+    
+    if (item) {
+      // Delete all variant images
+      for (const variant of item.variants) {
+        if (variant.imageUri) {
+          await this.deleteImageIfExists(variant.imageUri);
+        }
       }
-      
-      // Then delete the item file
-      const file = new FileSystem.File(MASTER_ITEMS_DIR, `${itemId}.json`);
-      if (file.exists) {
-        file.delete();
-      }
-    } catch (error) {
-      console.error('Error deleting master item:', error);
     }
+    
+    // Then delete the item file
+    const file = new FileSystem.File(MASTER_ITEMS_DIR, `${itemId}.json`);
+    if (file.exists) {
+      file.delete();
+      console.log('Deleted master item:', itemId);
+    }
+  } catch (error) {
+    console.error('Error deleting master item:', error);
+  }
+}
+
+  static async addMasterItemToList(listId: string, masterItemId: string, variantIndex: number = 0): Promise<void> {
+  const lists = await this.getAllLists();
+  const list = lists.find(l => l.id === listId);
+  if (!list) return;
+
+  const masterItems = await this.getAllMasterItems();
+  const masterItem = masterItems.find(i => i.id === masterItemId);
+  if (!masterItem) return;
+  
+  // Ensure variant index is valid
+  const safeVariantIndex = Math.min(variantIndex, masterItem.variants.length - 1);
+  const variant = masterItem.variants[safeVariantIndex];
+
+  // Check if this specific variant already exists in list
+  const existingItem = list.items.find(
+    i => i.masterItemId === masterItemId && i.variantIndex === safeVariantIndex
+  );
+  
+  if (existingItem) {
+    console.log('Item variant already in list');
+    return;
   }
 
-  static async addMasterItemToList(listId: string, masterItemId: string): Promise<void> {
-    const lists = await this.getAllLists();
-    const list = lists.find(l => l.id === listId);
-    if (!list) return;
+  const newListItem: ShoppingListItem = {
+    masterItemId: masterItem.id,
+    variantIndex: safeVariantIndex,
+    name: masterItem.name,
+    brand: variant.brand,
+    lastPrice: variant.defaultPrice,
+    averagePrice: variant.averagePrice,
+    priceAtAdd: variant.defaultPrice,
+    imageUri: variant.imageUri,
+    addedAt: Date.now()
+  };
 
-    const masterItems = await this.getAllMasterItems();
-    const masterItem = masterItems.find(i => i.id === masterItemId);
-    if (!masterItem) return;
-
-    // Check if item already exists in list
-    const existingItem = list.items.find(i => i.masterItemId === masterItemId);
-    if (existingItem) {
-      console.log('Item already in list');
-      return;
-    }
-
-    const newListItem: ShoppingListItem = {
-      masterItemId: masterItem.id,
-      name: masterItem.name,
-      brand: masterItem.brand,
-      lastPrice: masterItem.defaultPrice,
-      averagePrice: masterItem.averagePrice,
-      priceAtAdd: masterItem.defaultPrice,
-      imageUri: masterItem.imageUri,
-      addedAt: Date.now()
-    };
-
-    list.items.push(newListItem);
-    list.updatedAt = Date.now();
-    await this.saveList(list);
-  }
+  list.items.push(newListItem);
+  list.updatedAt = Date.now();
+  await this.saveList(list);
+}
 
   // ============= SHOPPING LISTS METHODS =============
 
@@ -289,53 +451,69 @@ export class ShoppingListStorage {
 
   // ============= PRICE HISTORY METHODS =============
 
-  static async addPriceToHistory(masterItemId: string, price: number, listId?: string, listName?: string, receiptImageUri?: string): Promise<void> {
-    try {
-      const items = await this.getAllMasterItems();
-      const itemIndex = items.findIndex(i => i.id === masterItemId);
-      
-      if (itemIndex === -1) {
-        console.error('Master item not found:', masterItemId);
-        return;
-      }
-
-      const item = items[itemIndex];
-      
-      // Initialize priceHistory if it doesn't exist
-      if (!item.priceHistory) {
-        item.priceHistory = [];
-      }
-      
-      // Add new price record
-      const newRecord: PriceRecord = {
-        price,
-        date: Date.now(),
-        listId,
-        listName,
-        receiptImageUri
-      };
-      
-      item.priceHistory.push(newRecord);
-      
-      // Recalculate average
-      const total = item.priceHistory.reduce((sum, record) => sum + record.price, 0);
-      item.averagePrice = total / item.priceHistory.length;
-      
-      // Update default price to latest
-      item.defaultPrice = price;
-      item.updatedAt = Date.now();
-      
-      // Save the updated item
-      await this.saveMasterItem(item);
-      
-      console.log('Price history updated for item:', item.name);
-    } catch (error) {
-      console.error('Error adding price to history:', error);
-      throw error;
+  static async addPriceToHistory(
+  masterItemId: string, 
+  variantIndex: number,
+  price: number, 
+  listId?: string, 
+  listName?: string, 
+  receiptImageUri?: string
+): Promise<void> {
+  try {
+    const items = await this.getAllMasterItems();
+    const itemIndex = items.findIndex(i => i.id === masterItemId);
+    
+    if (itemIndex === -1) {
+      console.error('Master item not found:', masterItemId);
+      return;
     }
-  }
 
-  static async saveActiveSession(session: ActiveSession): Promise<void> {
+    const item = items[itemIndex];
+    
+    // Ensure variant index is valid
+    if (variantIndex >= item.variants.length) {
+      console.error('Invalid variant index:', variantIndex);
+      return;
+    }
+    
+    const variant = item.variants[variantIndex];
+    
+    // Initialize priceHistory if it doesn't exist
+    if (!variant.priceHistory) {
+      variant.priceHistory = [];
+    }
+    
+    // Add new price record
+    const newRecord: PriceRecord = {
+      price,
+      date: Date.now(),
+      listId,
+      listName,
+      receiptImageUri
+    };
+    
+    variant.priceHistory.push(newRecord);
+    
+    // Recalculate average
+    const total = variant.priceHistory.reduce((sum, record) => sum + record.price, 0);
+    variant.averagePrice = total / variant.priceHistory.length;
+    
+    // Update default price to latest
+    variant.defaultPrice = price;
+    variant.updatedAt = Date.now();
+    item.updatedAt = Date.now();
+    
+    // Save the updated item
+    await this.saveMasterItem(item);
+    
+    console.log(`Price history updated for ${item.name} - ${variant.brand}: $${price}`);
+  } catch (error) {
+    console.error('Error adding price to history:', error);
+    throw error;
+  }
+}
+
+static async saveActiveSession(session: ActiveSession): Promise<void> {
   try {
     const file = new FileSystem.File(Paths.document, 'active_session.json');
     await file.write(JSON.stringify(session, null, 2));
@@ -453,97 +631,152 @@ static async clearActiveSession(): Promise<void> {
   // ============= CLEANUP METHOD =============
 
   static async cleanupOrphanedImages() {
-    try {
-      console.log('Starting orphaned images cleanup...');
-      
-      // Get all valid image URIs from master items
-      const masterItems = await this.getAllMasterItems();
-      const validMasterItemImages = new Set(
-        masterItems
-          .map(item => item.imageUri)
-          .filter(uri => uri !== undefined)
-      );
-      
-      // Get all valid image URIs from shopping list items
-      const lists = await this.getAllLists();
-      const validListItemImages = new Set(
-        lists.flatMap(list => 
-          list.items
-            .map(item => item.imageUri)
-            .filter(uri => uri !== undefined)
-        )
-      );
-      
-      // Get all valid receipt images from sessions
-      const sessions = await this.getSessions();
-      const validReceiptImages = new Set(
-        sessions
-          .map(session => session.receiptImageUri)
-          .filter(uri => uri !== undefined)
-      );
-      
-      // Get all image files from products directory
-      if (PRODUCTS_IMAGES_DIR.exists) {
-        const productImages = PRODUCTS_IMAGES_DIR.list();
-        for (const file of productImages) {
-          if (file instanceof FileSystem.File) {
-            // If image is not in any valid set, delete it
-            if (!validMasterItemImages.has(file.uri) && !validListItemImages.has(file.uri)) {
-              console.log('Deleting orphaned product image:', file.uri);
-              file.delete();
-            }
+  try {
+    console.log('Starting orphaned images cleanup...');
+    
+    // Get all valid image URIs from master item variants
+    const masterItems = await this.getAllMasterItems();
+    const validMasterItemImages = new Set<string>();
+    
+    masterItems.forEach(item => {
+      item.variants.forEach(variant => {
+        if (variant.imageUri) {
+          validMasterItemImages.add(variant.imageUri);
+        }
+      });
+    });
+    
+    // Get all valid image URIs from shopping list items
+    const lists = await this.getAllLists();
+    const validListItemImages = new Set<string>();
+    
+    lists.forEach(list => {
+      list.items.forEach(item => {
+        if (item.imageUri) {
+          validListItemImages.add(item.imageUri);
+        }
+      });
+    });
+    
+    // Get all valid receipt images from sessions
+    const sessions = await this.getSessions();
+    const validReceiptImages = new Set(
+      sessions
+        .map(session => session.receiptImageUri)
+        .filter(uri => uri !== undefined) as string[]
+    );
+    
+    // Get all image files from products directory
+    if (PRODUCTS_IMAGES_DIR.exists) {
+      const productImages = PRODUCTS_IMAGES_DIR.list();
+      for (const file of productImages) {
+        if (file instanceof FileSystem.File) {
+          // If image is not in any valid set, delete it
+          if (!validMasterItemImages.has(file.uri) && !validListItemImages.has(file.uri)) {
+            console.log('Deleting orphaned product image:', file.uri);
+            file.delete();
           }
         }
       }
-      
-      // Get all image files from receipts directory
-      if (RECEIPTS_IMAGES_DIR.exists) {
-        const receiptImages = RECEIPTS_IMAGES_DIR.list();
-        for (const file of receiptImages) {
-          if (file instanceof FileSystem.File) {
-            if (!validReceiptImages.has(file.uri)) {
-              console.log('Deleting orphaned receipt image:', file.uri);
-              file.delete();
-            }
-          }
-        }
-      }
-      
-      console.log('Cleanup completed');
-    } catch (error) {
-      console.error('Error during cleanup:', error);
     }
+    
+    // Get all image files from receipts directory
+    if (RECEIPTS_IMAGES_DIR.exists) {
+      const receiptImages = RECEIPTS_IMAGES_DIR.list();
+      for (const file of receiptImages) {
+        if (file instanceof FileSystem.File) {
+          if (!validReceiptImages.has(file.uri)) {
+            console.log('Deleting orphaned receipt image:', file.uri);
+            file.delete();
+          }
+        }
+      }
+    }
+    
+    console.log('Cleanup completed');
+  } catch (error) {
+    console.error('Error during cleanup:', error);
   }
+}
 
   // ============= MIGRATION METHOD =============
 
   static async migrateExistingItems() {
-    try {
-      const items = await this.getAllMasterItems();
-      let needsUpdate = false;
+  try {
+    const items = await this.getAllMasterItems();
+    let needsUpdate = false;
+    
+    for (const item of items) {
+      // Check if this is an old-style item (has brand property directly)
+      const oldItem = item as any;
       
-      for (const item of items) {
-        if (!item.priceHistory) {
-          // Initialize priceHistory with default price
-          item.priceHistory = [{
-            price: item.defaultPrice || 0,
-            date: item.createdAt || Date.now()
-          }];
-          item.averagePrice = item.defaultPrice || 0;
-          needsUpdate = true;
-          
+      if (oldItem.brand && !item.variants) {
+        // This is an old single-brand item, convert to new structure
+        console.log('Converting old item to new structure:', oldItem.name);
+        
+        const now = Date.now();
+        const newVariants: BrandVariant[] = [{
+          brand: oldItem.brand || 'Default',
+          defaultPrice: oldItem.defaultPrice || 0,
+          averagePrice: oldItem.averagePrice || 0,
+          priceHistory: oldItem.priceHistory || [{
+            price: oldItem.defaultPrice || 0,
+            date: oldItem.createdAt || now
+          }],
+          imageUri: oldItem.imageUri,
+          createdAt: oldItem.createdAt || now,
+          updatedAt: oldItem.updatedAt || now
+        }];
+        
+        // Create new structure item
+        const newItem: MasterItem = {
+          id: item.id,
+          name: item.name,
+          variants: newVariants,
+          defaultVariantIndex: 0,
+          createdAt: item.createdAt,
+          updatedAt: now
+        };
+        
+        // Save the converted item
+        await this.saveMasterItem(newItem);
+        needsUpdate = true;
+        console.log('Converted item:', item.name);
+      } 
+      // For new-style items, just ensure each variant has priceHistory
+      else if (item.variants) {
+        let itemNeedsUpdate = false;
+        
+        for (const variant of item.variants) {
+          if (!variant.priceHistory || variant.priceHistory.length === 0) {
+            // Initialize price history for this variant
+            variant.priceHistory = [{
+              price: variant.defaultPrice,
+              date: variant.createdAt || Date.now()
+            }];
+            variant.averagePrice = variant.defaultPrice;
+            variant.updatedAt = Date.now();
+            itemNeedsUpdate = true;
+          }
+        }
+        
+        if (itemNeedsUpdate) {
+          item.updatedAt = Date.now();
           await this.saveMasterItem(item);
-          console.log('Migrated item:', item.name);
+          needsUpdate = true;
         }
       }
-      
-      if (needsUpdate) {
-        console.log('Migration completed successfully');
-      }
-    } catch (error) {
-      console.error('Error during migration:', error);
     }
+    
+    if (needsUpdate) {
+      console.log('Migration completed successfully');
+    } else {
+      console.log('No migration needed');
+    }
+  } catch (error) {
+    console.error('Error during migration:', error);
   }
+}
 
   // ============= UTILITY METHODS =============
 

@@ -30,56 +30,92 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const [editingActual, setEditingActual] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Create a unique key for each item combining masterItemId and variantIndex
+  const getItemKey = (item: ShoppingListItem) => `${item.masterItemId}_${item.variantIndex}`;
+
   useEffect(() => {
+  let isMounted = true; // Prevent state updates if component unmounts
+  
+  navigation.setOptions({
+    headerRight: () => (
+      <TouchableOpacity
+        onPress={() => {
+          Alert.alert(
+            'Cancel Shopping',
+            'Are you sure you want to cancel this shopping trip?\n\nProgress will be saved and you can resume later.',
+            [
+              { text: 'Continue Shopping', style: 'cancel' },
+              {
+                text: 'Save & Exit',
+                onPress: async () => {
+                  await saveActiveSessionState();
+                  navigation.navigate('Welcome');
+                }
+              }
+            ]
+          );
+        }}
+        style={{ marginRight: 16 }}
+      >
+        <Text style={{ color: '#ff3b30', fontSize: 16 }}>Exit</Text>
+      </TouchableOpacity>
+    ),
+  });
+  
+  // Initial load
+  loadActiveSession();
+  
+  // Focus listener
   const unsubscribe = navigation.addListener('focus', () => {
-    loadActiveSession();
+    console.log('Screen focused, reloading...');
+    if (isMounted) {
+      loadActiveSession();
+    }
   });
 
-  return unsubscribe;
-}, [navigation]);
+  // Cleanup
+  return () => {
+    isMounted = false;
+    unsubscribe();
+  };
+}, [navigation]); // Remove 'list' from dependencies!
 
   const loadActiveSession = async () => {
+  console.log('Loading active session...');
   setIsLoading(true);
   try {
-    // First try to load existing active session
     const activeSession = await ShoppingListStorage.getActiveSession();
-    
-    // Get the latest list data
     const lists = await ShoppingListStorage.getAllLists();
     const currentList = lists.find(l => l.id === listId);
     
     if (!currentList) {
+      Alert.alert('Error', 'Shopping list not found');
       setIsLoading(false);
       return;
     }
     
+    // Only update if list actually changed
+    setList(prevList => {
+      if (JSON.stringify(prevList) === JSON.stringify(currentList)) {
+        return prevList; // No change
+      }
+      return currentList;
+    });
+    
     if (activeSession && activeSession.listId === listId) {
-      // Restore previous session but merge with current list items
-      const mergedCheckedItems = { ...activeSession.checkedItems };
-      const mergedItemPrices = { ...itemPrices };
+      setCheckedItems(activeSession.checkedItems || {});
       
-      // Ensure all current list items are represented
-      currentList.items.forEach(item => {
-        if (activeSession.checkedItems[item.masterItemId]) {
-          mergedCheckedItems[item.masterItemId] = activeSession.checkedItems[item.masterItemId];
-          if (activeSession.checkedItems[item.masterItemId].price) {
-            mergedItemPrices[item.masterItemId] = activeSession.checkedItems[item.masterItemId].price!;
-          }
-        }
+      const prices: {[key: string]: number} = {};
+      Object.entries(activeSession.checkedItems || {}).forEach(([key, value]) => {
+        if (value.price) prices[key] = value.price;
       });
-      
-      setCheckedItems(mergedCheckedItems);
-      setItemPrices(mergedItemPrices);
-      setList(currentList);
+      setItemPrices(prices);
       setReceiptImage(activeSession.receiptImageUri || null);
     } else {
-      // Start new session
-      setList(currentList);
       setCheckedItems({});
       setItemPrices({});
       setReceiptImage(null);
       
-      // Create new active session
       const newSession: ActiveSession = {
         id: Date.now().toString(),
         listId: currentList.id,
@@ -87,6 +123,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
         startTime: Date.now(),
         items: currentList.items.map(item => ({
           masterItemId: item.masterItemId,
+          variantIndex: item.variantIndex,
           name: item.name,
           brand: item.brand,
           lastPrice: item.lastPrice,
@@ -105,105 +142,116 @@ export default function ActiveListScreen({ route, navigation }: any) {
 };
 
   const saveActiveSessionState = async (
-  newCheckedItems?: {[key: string]: { checked: boolean; price?: number; checkedAt: number }},
-  newItemPrices?: {[key: string]: number}
-) => {
-  if (!list) return;
-  
-  const checkedToUse = newCheckedItems || checkedItems;
-  const pricesToUse = newItemPrices || itemPrices;
-  
-  const activeSession: ActiveSession = {
-    id: Date.now().toString(),
-    listId: list.id,
-    listName: list.name,
-    startTime: Date.now(),
-    items: list.items.map(item => ({
-      masterItemId: item.masterItemId,
-      name: item.name,
-      brand: item.brand,
-      lastPrice: item.lastPrice,
-      checked: checkedToUse[item.masterItemId]?.checked || false,
-      price: pricesToUse[item.masterItemId],
-      imageUri: item.imageUri
-    })),
-    checkedItems: checkedToUse,
-    receiptImageUri: receiptImage || undefined
-  };
-  
-  await ShoppingListStorage.saveActiveSession(activeSession);
-};
-
-const handleReturnFromAddItems = async () => {
-  // Reload the list to get new items
-  const lists = await ShoppingListStorage.getAllLists();
-  const updatedList = lists.find(l => l.id === listId);
-  
-  if (updatedList) {
-    setList(updatedList);
+    newCheckedItems?: {[key: string]: { checked: boolean; price?: number; checkedAt: number }},
+    newItemPrices?: {[key: string]: number}
+  ) => {
+    if (!list) return;
     
-    // Update active session with new items
-    const activeSession = await ShoppingListStorage.getActiveSession();
-    if (activeSession) {
-      // Merge existing checked items with new list
-      const updatedCheckedItems = { ...checkedItems };
-      const updatedItemPrices = { ...itemPrices };
+    const checkedToUse = newCheckedItems || checkedItems;
+    const pricesToUse = newItemPrices || itemPrices;
+    
+    const activeSession: ActiveSession = {
+      id: Date.now().toString(),
+      listId: list.id,
+      listName: list.name,
+      startTime: Date.now(),
+      items: list.items.map(item => ({
+        masterItemId: item.masterItemId,
+        variantIndex: item.variantIndex,
+        name: item.name,
+        brand: item.brand,
+        lastPrice: item.lastPrice,
+        checked: checkedToUse[getItemKey(item)]?.checked || false,
+        price: pricesToUse[getItemKey(item)],
+        imageUri: item.imageUri
+      })),
+      checkedItems: checkedToUse,
+      receiptImageUri: receiptImage || undefined
+    };
+    
+    await ShoppingListStorage.saveActiveSession(activeSession);
+  };
+
+  const handleReturnFromAddItems = async () => {
+    // Reload the list to get new items
+    const lists = await ShoppingListStorage.getAllLists();
+    const updatedList = lists.find(l => l.id === listId);
+    
+    if (updatedList) {
+      setList(updatedList);
       
-      // Save updated session
-      await saveActiveSessionState(updatedCheckedItems, updatedItemPrices);
+      // Update active session with new items
+      const activeSession = await ShoppingListStorage.getActiveSession();
+      if (activeSession) {
+        // Merge existing checked items with new list
+        const updatedCheckedItems = { ...checkedItems };
+        const updatedItemPrices = { ...itemPrices };
+        
+        // Save updated session
+        await saveActiveSessionState(updatedCheckedItems, updatedItemPrices);
+      }
     }
-  }
+  };
+
+  const handleAddItems = () => {
+  navigation.navigate('SelectMasterItem', { 
+    listId,
+    onGoBack: () => handleReturnFromAddItems()
+  });
 };
 
   const handleItemPress = (item: ShoppingListItem) => {
     setSelectedItem(item);
-    setPriceInput(itemPrices[item.masterItemId]?.toString() || item.lastPrice.toString());
+    setPriceInput(itemPrices[getItemKey(item)]?.toString() || item.lastPrice.toString());
     setPriceModalVisible(true);
   };
 
   const handlePriceSubmit = async () => {
-  if (!selectedItem || !list) return;
+    if (!selectedItem || !list) return;
 
-  const price = parseFloat(priceInput);
-  if (isNaN(price) || price < 0) {
-    Alert.alert('Error', 'Please enter a valid price');
-    return;
-  }
-
-  // Add to price history
-  await ShoppingListStorage.addPriceToHistory(
-    selectedItem.masterItemId,
-    price,
-    list.id,
-    list.name,
-    receiptImage || undefined
-  );
-
-  // Update state
-  const newCheckedItems = {
-    ...checkedItems,
-    [selectedItem.masterItemId]: {
-      checked: true,
-      price: price,
-      checkedAt: Date.now()
+    const price = parseFloat(priceInput);
+    if (isNaN(price) || price < 0) {
+      Alert.alert('Error', 'Please enter a valid price');
+      return;
     }
+
+    const itemKey = getItemKey(selectedItem);
+
+    // Add to price history with variant index
+    await ShoppingListStorage.addPriceToHistory(
+      selectedItem.masterItemId,
+      selectedItem.variantIndex,
+      price,
+      list.id,
+      list.name,
+      receiptImage || undefined
+    );
+
+    // Update state
+    const newCheckedItems = {
+      ...checkedItems,
+      [itemKey]: {
+        checked: true,
+        price: price,
+        checkedAt: Date.now()
+      }
+    };
+    
+    const newItemPrices = {
+      ...itemPrices,
+      [itemKey]: price
+    };
+
+    setCheckedItems(newCheckedItems);
+    setItemPrices(newItemPrices);
+
+    // Save active session with updated state
+    await saveActiveSessionState(newCheckedItems, newItemPrices);
+
+    setPriceModalVisible(false);
+    setSelectedItem(null);
+    setPriceInput('');
   };
-  
-  const newItemPrices = {
-    ...itemPrices,
-    [selectedItem.masterItemId]: price
-  };
-
-  setCheckedItems(newCheckedItems);
-  setItemPrices(newItemPrices);
-
-  // Save active session with updated state
-  await saveActiveSessionState(newCheckedItems, newItemPrices);
-
-  setPriceModalVisible(false);
-  setSelectedItem(null);
-  setPriceInput('');
-};
 
   const handleTakePhoto = async (item: ShoppingListItem) => {
     const uri = await ShoppingListStorage.pickImage();
@@ -211,7 +259,7 @@ const handleReturnFromAddItems = async () => {
       const savedUri = await ShoppingListStorage.saveImage(uri, 'product');
       
       const updatedItems = list.items.map(i => {
-        if (i.masterItemId === item.masterItemId) {
+        if (i.masterItemId === item.masterItemId && i.variantIndex === item.variantIndex) {
           return { ...i, imageUri: savedUri };
         }
         return i;
@@ -247,9 +295,10 @@ const handleReturnFromAddItems = async () => {
     let actual = 0;
     
     list.items.forEach(item => {
-      const price = itemPrices[item.masterItemId] || item.lastPrice;
+      const itemKey = getItemKey(item);
+      const price = itemPrices[itemKey] || item.lastPrice;
       estimated += price;
-      if (checkedItems[item.masterItemId]) {
+      if (checkedItems[itemKey]?.checked) {
         actual += price;
       }
     });
@@ -261,49 +310,50 @@ const handleReturnFromAddItems = async () => {
   };
 
   const handleSaveSession = async () => {
-    if (!list) return;
+  if (!list) return;
 
-    const paidAmount = parseFloat(actualPaid) || actualTotal;
+  const paidAmount = parseFloat(actualPaid) || actualTotal;
 
-    const session: ShoppingSession = {
-      id: Date.now().toString(),
-      listId: list.id,
-      listName: list.name,
-      date: Date.now(),
-      total: paidAmount,
-      calculatedTotal: actualTotal,
-      receiptImageUri: receiptImage || undefined,
-      items: list.items.map(item => ({
-        masterItemId: item.masterItemId,
-        name: item.name,
-        price: itemPrices[item.masterItemId] || item.lastPrice,
-        checked: !!checkedItems[item.masterItemId]?.checked || false
-      }))
-    };
-    
-    await ShoppingListStorage.saveSession(session);
-    await ShoppingListStorage.clearActiveSession(); // Clear active session
-    navigation.navigate('Welcome');
+  const session: ShoppingSession = {
+    id: Date.now().toString(),
+    listId: list.id,
+    listName: list.name,
+    date: Date.now(),
+    total: paidAmount,
+    calculatedTotal: actualTotal,
+    receiptImageUri: receiptImage || undefined,
+    items: list.items.map(item => ({
+      masterItemId: item.masterItemId,
+      variantIndex: item.variantIndex,
+      name: item.name,
+      brand: item.brand,
+      price: itemPrices[getItemKey(item)] || item.lastPrice,
+      checked: checkedItems[getItemKey(item)]?.checked || false
+    }))
   };
-
-  const handleAddItems = () => {
-  navigation.navigate('SelectMasterItem', { 
-    listId,
-    onGoBack: () => handleReturnFromAddItems() // Pass callback
+  
+  await ShoppingListStorage.saveSession(session);
+  await ShoppingListStorage.clearActiveSession(); // Clear active session
+  
+  // Reset navigation stack to Welcome screen
+  navigation.reset({
+    index: 0,
+    routes: [{ name: 'Welcome' }],
   });
 };
 
   const getTotalSoFar = () => {
     let total = 0;
-    Object.keys(itemPrices).forEach(id => {
-      total += itemPrices[id];
+    Object.values(itemPrices).forEach(price => {
+      total += price;
     });
     return total;
   };
 
   const renderItem = ({ item }: { item: ShoppingListItem }) => {
-    const isChecked = checkedItems[item.masterItemId] || false;
-    const itemPrice = itemPrices[item.masterItemId] || item.lastPrice;
+    const itemKey = getItemKey(item);
+    const isChecked = checkedItems[itemKey]?.checked || false;
+    const itemPrice = itemPrices[itemKey] || item.lastPrice;
 
     return (
       <TouchableOpacity
@@ -330,8 +380,8 @@ const handleReturnFromAddItems = async () => {
             {item.brand}
           </Text>
           <Text style={[styles.price, isChecked && styles.checkedText]}>
-            ${itemPrice.toFixed(2)}
-          </Text>
+  ${(itemPrice || 0).toFixed(2)}
+</Text>
         </View>
 
         {isChecked && (
@@ -359,7 +409,7 @@ const handleReturnFromAddItems = async () => {
     );
   }
 
-  const checkedCount = Object.keys(checkedItems).length;
+  const checkedCount = Object.values(checkedItems).filter(item => item.checked).length;
   const totalSoFar = getTotalSoFar();
 
   return (
@@ -368,8 +418,8 @@ const handleReturnFromAddItems = async () => {
         <View>
           <Text style={styles.listName}>{list.name}</Text>
           <Text style={styles.progress}>
-            {checkedCount} / {list.items.length} items • ${totalSoFar.toFixed(2)}
-          </Text>
+  {checkedCount} / {list.items.length} items • ${(totalSoFar || 0).toFixed(2)}
+</Text>
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity
@@ -390,7 +440,7 @@ const handleReturnFromAddItems = async () => {
       <FlatList
         data={list.items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.masterItemId}
+        keyExtractor={(item) => getItemKey(item)}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -415,7 +465,7 @@ const handleReturnFromAddItems = async () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Enter Price</Text>
-            <Text style={styles.itemNameModal}>{selectedItem?.name}</Text>
+            <Text style={styles.itemNameModal}>{selectedItem?.name} - {selectedItem?.brand}</Text>
             
             <TextInput
               style={styles.input}
@@ -448,89 +498,101 @@ const handleReturnFromAddItems = async () => {
       </Modal>
 
       {/* Completion Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={completionModalVisible}
-        onRequestClose={() => setCompletionModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Complete Shopping</Text>
-            
-            <View style={styles.summaryContainer}>
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Estimated Total:</Text>
-                <Text style={styles.totalValue}>${estimatedTotal.toFixed(2)}</Text>
-              </View>
-              
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Actual Paid:</Text>
-                {editingActual ? (
-                  <TextInput
-                    style={styles.paidInput}
-                    value={actualPaid}
-                    onChangeText={setActualPaid}
-                    keyboardType="decimal-pad"
-                    autoFocus
-                    onBlur={() => setEditingActual(false)}
-                    onSubmitEditing={() => setEditingActual(false)}
-                  />
-                ) : (
-                  <TouchableOpacity onPress={() => setEditingActual(true)}>
-                    <Text style={[styles.totalValue, styles.actualPaidText]}>
-                      ${parseFloat(actualPaid || '0').toFixed(2)} ✎
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              
-              <View style={[styles.totalRow, styles.differenceRow]}>
-                <Text style={styles.totalLabel}>Difference:</Text>
-                <Text style={[
-                  styles.totalValue,
-                  parseFloat(actualPaid || '0') <= estimatedTotal ? styles.savings : styles.overspend
-                ]}>
-                  {parseFloat(actualPaid || '0') <= estimatedTotal ? '-' : '+'}$
-                  {Math.abs(estimatedTotal - parseFloat(actualPaid || '0')).toFixed(2)}
-                </Text>
-              </View>
-              
-              <Text style={styles.itemSummary}>
-                {checkedCount} of {list.items.length} items purchased
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.receiptButton}
-              onPress={handleTakeReceiptPhoto}
-            >
-              <Text style={styles.receiptButtonText}>
-                {receiptImage ? '📸 Retake Receipt Photo' : '📷 Take Receipt Photo'}
+<Modal
+  animationType="slide"
+  transparent={true}
+  visible={completionModalVisible}
+  onRequestClose={() => setCompletionModalVisible(false)}
+>
+  <View style={styles.modalContainer}>
+    <View style={styles.modalContent}>
+      <Text style={styles.modalTitle}>Complete Shopping</Text>
+      
+      <View style={styles.summaryContainer}>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Estimated Total:</Text>
+          <Text style={styles.totalValue}>${(estimatedTotal || 0).toFixed(2)}</Text>
+        </View>
+        
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Actual Paid:</Text>
+          {editingActual ? (
+            <TextInput
+              style={styles.paidInput}
+              value={actualPaid}
+              onChangeText={setActualPaid}
+              keyboardType="decimal-pad"
+              autoFocus
+              onBlur={() => setEditingActual(false)}
+              onSubmitEditing={() => setEditingActual(false)}
+            />
+          ) : (
+            <TouchableOpacity onPress={() => setEditingActual(true)}>
+              <Text style={[styles.totalValue, styles.actualPaidText]}>
+                ${parseFloat(actualPaid || '0').toFixed(2)} ✎
               </Text>
             </TouchableOpacity>
-
-            {receiptImage && (
-              <Image source={{ uri: receiptImage }} style={styles.receiptPreview} />
-            )}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setCompletionModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Continue Shopping</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.completeButton]}
-                onPress={handleSaveSession}
-              >
-                <Text style={styles.completeButtonText}>Finish & Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          )}
         </View>
-      </Modal>
+        
+        <View style={[styles.totalRow, styles.differenceRow]}>
+          <Text style={styles.totalLabel}>Difference:</Text>
+          <Text style={[
+            styles.totalValue,
+            parseFloat(actualPaid || '0') <= estimatedTotal ? styles.savings : styles.overspend
+          ]}>
+            {parseFloat(actualPaid || '0') <= estimatedTotal ? '-' : '+'}$
+            {Math.abs(estimatedTotal - parseFloat(actualPaid || '0')).toFixed(2)}
+          </Text>
+        </View>
+        
+        <Text style={styles.itemSummary}>
+          {checkedCount} of {list.items.length} items purchased
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.receiptButton}
+        onPress={handleTakeReceiptPhoto}
+      >
+        <Text style={styles.receiptButtonText}>
+          {receiptImage ? '📸 Retake Receipt Photo' : '📷 Take Receipt Photo'}
+        </Text>
+      </TouchableOpacity>
+
+      {receiptImage && (
+        <Image source={{ uri: receiptImage }} style={styles.receiptPreview} />
+      )}
+
+      <View style={styles.completionModalButtons}>
+        <TouchableOpacity
+          style={[styles.completionButton, styles.cancelCompletionButton]}
+          onPress={() => setCompletionModalVisible(false)}
+        >
+          <Text style={styles.cancelCompletionButtonText}>Continue Shopping</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.completionButton, styles.saveExitButton]}
+          onPress={async () => {
+            await saveActiveSessionState();
+            setCompletionModalVisible(false);
+            navigation.navigate('Welcome');
+          }}
+        >
+          <Text style={styles.saveExitButtonText}>Save & Exit</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.completionButton, styles.finishButton]}
+          onPress={handleSaveSession}
+        >
+          <Text style={styles.finishButtonText}>Finish & Save</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 }
@@ -547,6 +609,39 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginRight: 8,
   },
+  completionModalButtons: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  marginTop: 16,
+},
+completionButton: {
+  flex: 1,
+  padding: 12,
+  borderRadius: 8,
+  alignItems: 'center',
+  marginHorizontal: 4,
+},
+cancelCompletionButton: {
+  backgroundColor: '#f5f5f5',
+},
+cancelCompletionButtonText: {
+  color: '#666',
+  fontWeight: '600',
+},
+saveExitButton: {
+  backgroundColor: '#FFA500', // Orange
+},
+saveExitButtonText: {
+  color: '#fff',
+  fontWeight: '600',
+},
+finishButton: {
+  backgroundColor: '#4CAF50', // Green
+},
+finishButtonText: {
+  color: '#fff',
+  fontWeight: '600',
+},
   addButtonText: {
     color: '#fff',
     fontWeight: '600',
@@ -584,13 +679,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  headerCompleteButton: {
+  completeButton: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
   },
-  headerCompleteButtonText: {
+  completeButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
@@ -598,22 +693,22 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   paidInput: {
-  borderWidth: 1,
-  borderColor: '#007AFF',
-  borderRadius: 4,
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  fontSize: 18,
-  fontWeight: '600',
-  color: '#007AFF',
-  minWidth: 100,
-  textAlign: 'right',
-},
-actualPaidText: {
-  color: '#007AFF',
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-},
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#007AFF',
+    minWidth: 100,
+    textAlign: 'right',
+  },
+  actualPaidText: {
+    color: '#007AFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
   itemContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -730,18 +825,11 @@ actualPaidText: {
   submitButton: {
     backgroundColor: '#007AFF',
   },
-  completeButton: {
-    backgroundColor: '#4CAF50',
-  },
   cancelButtonText: {
     color: '#666',
     fontWeight: '600',
   },
   submitButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  completeButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
@@ -765,10 +853,6 @@ actualPaidText: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-  },
-  actualTotal: {
-    color: '#007AFF',
-    fontSize: 20,
   },
   differenceRow: {
     marginTop: 8,

@@ -31,6 +31,8 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
     const lists = await ShoppingListStorage.getAllLists();
     const currentList = lists.find(l => l.id === listId);
     if (currentList) {
+      // Create a Set of composite keys or just masterItemIds for simple check
+      // For simplicity, we'll just check if any variant of this item is in the list
       const addedIds = new Set(currentList.items.map(item => item.masterItemId));
       setAddedItemIds(addedIds);
     }
@@ -47,7 +49,18 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
       return;
     }
     
-    await ShoppingListStorage.addMasterItemToList(listId, item.id);
+    // If item has multiple variants, navigate to variant selection
+    if (item.variants.length > 1) {
+      navigation.navigate('EditListItem', {
+        listId,
+        masterItemId: item.id,
+        variantIndex: 0
+      });
+      return;
+    }
+    
+    // Otherwise add the default variant
+    await ShoppingListStorage.addMasterItemToList(listId, item.id, 0);
     
     // Update local state to show item as added
     setAddedItemIds(prev => new Set(prev).add(item.id));
@@ -62,7 +75,7 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
   const handleRemoveItem = async (item: MasterItem) => {
     Alert.alert(
       'Remove Item',
-      `Remove "${item.name}" from this shopping list?`,
+      `Remove all variants of "${item.name}" from this shopping list?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -74,7 +87,7 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
             const currentList = lists.find(l => l.id === listId);
             
             if (currentList) {
-              // Filter out the item
+              // Filter out all variants of this item
               const updatedItems = currentList.items.filter(
                 listItem => listItem.masterItemId !== item.id
               );
@@ -113,48 +126,48 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
     });
   };
 
-  useFocusEffect(
-  useCallback(() => {
-    // This will run every time the screen comes into focus
-    // Including when returning from EditMasterItem
-    loadItems();
-    loadCurrentListItems();
-  }, [])
-);
-
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.brand.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = items.filter(item => {
+    // Search in item name and all variant brands
+    const matchesName = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBrand = item.variants.some(v => 
+      v.brand.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return matchesName || matchesBrand;
+  });
 
   const renderItem = ({ item }: { item: MasterItem }) => {
+    const defaultVariant = item.variants[item.defaultVariantIndex || 0];
     const isAdded = addedItemIds.has(item.id);
+    
+    // Get all unique brands for display
+    const brandList = item.variants.map(v => v.brand).join(', ');
+    const lowestPrice = item.variants?.length > 0
+  ? Math.min(...item.variants.map(v => v.defaultPrice || 0).filter(p => !isNaN(p)))
+  : 0;
     
     return (
       <View style={[styles.itemContainer, isAdded && styles.addedItemContainer]}>
-        {/* Thumbnail */}
-        {item.imageUri ? (
-          <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
+        {/* Show default variant's image */}
+        {defaultVariant?.imageUri ? (
+          <Image source={{ uri: defaultVariant.imageUri }} style={styles.thumbnail} />
         ) : (
           <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
             <Text style={styles.placeholderText}>📷</Text>
           </View>
         )}
         
-        {/* Item Info */}
         <View style={styles.itemInfo}>
           <Text style={[styles.itemName, isAdded && styles.addedText]}>
             {item.name}
           </Text>
-          <Text style={[styles.itemBrand, isAdded && styles.addedText]}>
-            {item.brand}
+          <Text style={[styles.itemBrand, isAdded && styles.addedText]} numberOfLines={1}>
+            {brandList}
           </Text>
           <Text style={[styles.itemPrice, isAdded && styles.addedText]}>
-            Default: ${item.defaultPrice.toFixed(2)}
-          </Text>
+  From ${lowestPrice?.toFixed(2) ?? '0.00'}
+</Text>
         </View>
         
-        {/* Action Button */}
         {isAdded ? (
           <TouchableOpacity
             style={styles.removeIcon}
@@ -179,7 +192,7 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
       <View style={styles.header}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search items..."
+          placeholder="Search items or brands..."
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
