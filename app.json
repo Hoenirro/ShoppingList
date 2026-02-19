@@ -20,9 +20,7 @@
           {
             "CFBundleTypeName": "Shopping List",
             "CFBundleTypeRole": "Editor",
-            "LSItemContentTypes": [
-              "com.shoppinglist.shoplist"
-            ],
+            "LSItemContentTypes": ["com.shoppinglist.shoplist"],
             "LSHandlerRank": "Owner"
           }
         ],
@@ -30,13 +28,9 @@
           {
             "UTTypeIdentifier": "com.shoppinglist.shoplist",
             "UTTypeDescription": "Shopping List",
-            "UTTypeConformsTo": [
-              "public.data"
-            ],
+            "UTTypeConformsTo": ["public.data"],
             "UTTypeTagSpecification": {
-              "public.filename-extension": [
-                "shoplist"
-              ]
+              "public.filename-extension": ["shoplist"]
             }
           }
         ]
@@ -50,52 +44,17 @@
       "package": "com.yourname.shoppinglist",
       "intentFilters": [
         {
-          "action": "VIEW",
+          "action": "android.intent.action.VIEW",
           "autoVerify": false,
           "data": [
-            {
-              "scheme": "content",
-              "host": "*",
-              "pathPattern": ".*\\.shoplist",
-              "mimeType": "*/*"
-            },
-            {
-              "scheme": "file",
-              "host": "*",
-              "pathPattern": ".*\\.shoplist",
-              "mimeType": "*/*"
-            }
+            { "scheme": "content", "mimeType": "application/vnd.shoppinglist" },
+            { "scheme": "file", "mimeType": "application/vnd.shoppinglist" }
           ],
           "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "data": [
-            {
-              "scheme": "http",
-              "host": "*",
-              "pathPrefix": "/share"
-            },
-            {
-              "scheme": "https",
-              "host": "*",
-              "pathPrefix": "/share"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
           ]
         }
-      ],
-      "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.INTERNET",
-        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -110,11 +69,6 @@
           "cameraPermission": "Allow Shopping List to use your camera to take product photos."
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "437fd496-c693-4d83-a5a0-5c6f42cec573"
-      }
-    }
+    ]
   }
 }
