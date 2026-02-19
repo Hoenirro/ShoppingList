@@ -1,153 +1,138 @@
-// screens/ShoppingListScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, StatusBar,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
+import { ShareListService } from '../utils/shareList';
 import { ShoppingList, ShoppingListItem } from '../types';
+import { useTheme } from '../theme/ThemeContext';
+import { makeCommonStyles, makeShadow } from '../theme/theme';
 
 export default function ShoppingListScreen({ route, navigation }: any) {
   const { listId } = route.params;
+  const { theme } = useTheme();
+  const c = makeCommonStyles(theme);
   const [list, setList] = useState<ShoppingList | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useFocusEffect(
-  useCallback(() => {
-    loadList();
-  }, [])
-);
-
-const handleRefresh = () => {
-  loadList();
-};
+  useFocusEffect(useCallback(() => { loadList(); }, []));
 
   const loadList = async () => {
     const lists = await ShoppingListStorage.getAllLists();
-    const foundList = lists.find(l => l.id === listId);
-    setList(foundList || null);
+    setList(lists.find(l => l.id === listId) || null);
   };
 
-  const handleUseList = () => {
-    navigation.navigate('ActiveList', { listId });
+  const handleShareList = async () => {
+    if (!list) return;
+    try {
+      await ShareListService.exportList(list);
+    } catch (error: any) {
+      Alert.alert('Share Failed', error.message || 'Could not share this list.');
+    }
   };
-
-  const handleEditItem = (item: ShoppingListItem) => {
-  navigation.navigate('EditListItem', { 
-    listId, 
-    listItemId: item.masterItemId 
-  });
-};
-
-  const handleAddItem = () => {
-  // Navigate to selection screen instead of directly to edit
-  navigation.navigate('SelectMasterItem', { listId });
-};
 
   const handleRemoveItem = (item: ShoppingListItem) => {
     if (!list) return;
-    
-    Alert.alert(
-      'Remove Item',
-      `Are you sure you want to remove "${item.name}" from this list?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            const updatedItems = list.items.filter(i => i.masterItemId !== item.masterItemId);
-            const updatedList = {
-              ...list,
-              items: updatedItems,
-              updatedAt: Date.now(),
-            };
-            await ShoppingListStorage.saveList(updatedList);
-            setList(updatedList);
-          },
+    Alert.alert('Remove Item', `Remove "${item.name}" from this list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          const updatedItems = list.items.filter(i => i.masterItemId !== item.masterItemId);
+          const updatedList = { ...list, items: updatedItems, updatedAt: Date.now() };
+          await ShoppingListStorage.saveList(updatedList);
+          setList(updatedList);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const renderItem = ({ item }: { item: ShoppingListItem }) => (
-    <View style={styles.itemContainer}>
+    <View style={[c.card, styles.itemRow]}>
       {item.imageUri ? (
-        <Image source={{ uri: item.imageUri }} style={styles.thumbnail} />
+        <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
       ) : (
-        <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
-          <Text style={styles.placeholderText}>📷</Text>
+        <View style={[c.thumbnail, c.placeholder]}>
+          <Text style={{ fontSize: 22 }}>📷</Text>
         </View>
       )}
-      
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Last: </Text>
-          <Text style={styles.priceValue}>${item.lastPrice.toFixed(2)}</Text>
-          <Text style={styles.priceLabel}>  Avg: </Text>
-          <Text style={styles.priceValue}>${item.averagePrice.toFixed(2)}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+        <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
+        <View style={styles.priceRow}>
+          <Text style={[styles.priceChip, { color: theme.accent, backgroundColor: theme.chip }]}>
+            Last ${item.lastPrice.toFixed(2)}
+          </Text>
+          <Text style={[styles.priceChip, { color: theme.textMuted, backgroundColor: theme.chip }]}>
+            Avg ${item.averagePrice.toFixed(2)}
+          </Text>
         </View>
       </View>
-      
-      <View style={styles.actionButtons}>
+      <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditItem(item)}
+          style={[styles.actionBtn, { backgroundColor: theme.chip }]}
+          onPress={() => navigation.navigate('EditListItem', { listId, listItemId: item.masterItemId })}
         >
-          <Text style={styles.actionButtonText}>✎</Text>
+          <Text style={{ color: theme.textMuted, fontSize: 15 }}>✎</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity
-          style={[styles.actionButton, styles.removeButton]}
+          style={[styles.actionBtn, { backgroundColor: theme.danger + '22' }]}
           onPress={() => handleRemoveItem(item)}
         >
-          <Text style={styles.actionButtonText}>−</Text>
+          <Text style={{ color: theme.danger, fontSize: 18, fontWeight: '700' }}>−</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  if (!list) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
+  if (!list) return <View style={c.screen} />;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.listName}>{list.name}</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity style={styles.iconButton} onPress={handleAddItem}>
-            <Text style={styles.iconButtonText}>+</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.useButton} onPress={handleUseList}>
-            <Text style={styles.useButtonText}>Use</Text>
-          </TouchableOpacity>
+    <View style={c.screen}>
+      <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>{list.name}</Text>
+          <Text style={[styles.headerSub, { color: theme.textSubtle }]}>{list.items.length} items</Text>
         </View>
+
+        {/* Share button */}
+        <TouchableOpacity
+          style={[styles.headerBtn, { backgroundColor: theme.accent + '20' }]}
+          onPress={handleShareList}
+        >
+          <Text style={[styles.headerBtnText, { color: theme.accent }]}>↑ Share</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.headerBtn, { backgroundColor: theme.chip }]}
+          onPress={() => navigation.navigate('SelectMasterItem', { listId })}
+        >
+          <Text style={[styles.headerBtnText, { color: theme.accent }]}>+ Add</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.headerBtn, { backgroundColor: theme.accent, ...makeShadow(theme, 'sm') }]}
+          onPress={() => navigation.navigate('ActiveList', { listId })}
+        >
+          <Text style={[styles.headerBtnText, { color: theme.accentText }]}>Shop 🛒</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
         data={list.items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.masterItemId}
+        keyExtractor={item => item.masterItemId}
         contentContainerStyle={styles.listContainer}
-        refreshing={refreshing}
-  onRefresh={handleRefresh}
+        onRefresh={loadList}
+        refreshing={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No items in this list</Text>
-            <Text style={styles.emptySubtext}>Tap + to add items</Text>
+          <View style={c.emptyContainer}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>🧺</Text>
+            <Text style={c.emptyText}>This list is empty</Text>
+            <Text style={c.emptySubtext}>Tap "+ Add" to add items</Text>
           </View>
         }
       />
@@ -156,141 +141,17 @@ const handleRefresh = () => {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  listName: {
-    fontSize: 20,
-    fontWeight: '600',
-    flex: 1,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  iconButtonText: {
-    fontSize: 24,
-    color: '#007AFF',
-  },
-  useButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  useButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 16,
-  },
-  itemContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  thumbnail: {
-    width: 50,
-    height: 50,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  placeholderThumbnail: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 24,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  itemBrand: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  priceLabel: {
-    fontSize: 12,
-    color: '#999',
-  },
-  priceValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#007AFF',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 4,
-  },
-  editButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  removeButton: {
-    backgroundColor: '#ff3b30',
-  },
-  actionButtonText: {
-    fontSize: 18,
-    color: '#fff',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-  },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, gap: 8 },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerSub: { fontSize: 12, marginTop: 2 },
+  headerBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  headerBtnText: { fontSize: 13, fontWeight: '700' },
+  listContainer: { padding: 14, paddingBottom: 40 },
+  itemRow: { flexDirection: 'row', alignItems: 'center' },
+  itemName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  itemBrand: { fontSize: 13, marginBottom: 6 },
+  priceRow: { flexDirection: 'row', gap: 6 },
+  priceChip: { fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  actions: { flexDirection: 'column', gap: 6, marginLeft: 8 },
+  actionBtn: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 });

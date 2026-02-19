@@ -1,31 +1,97 @@
 {
   "expo": {
     "name": "ShoppingList",
-    "slug": "ShoppingList",
+    "slug": "shoppinglist",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F2F7F4"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.shoppinglist",
+      "infoPlist": {
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Shopping List",
+            "CFBundleTypeRole": "Editor",
+            "LSItemContentTypes": [
+              "com.shoppinglist.shoplist"
+            ],
+            "LSHandlerRank": "Owner"
+          }
+        ],
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.shoppinglist.shoplist",
+            "UTTypeDescription": "Shopping List",
+            "UTTypeConformsTo": [
+              "public.data"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "shoplist"
+              ]
+            }
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#F2F7F4"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.ShoppingList"
+      "package": "com.yourname.shoppinglist",
+      "intentFilters": [
+        {
+          "action": "android.intent.action.VIEW",
+          "autoVerify": false,
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "application/vnd.shoppinglist"
+            },
+            {
+              "scheme": "file",
+              "mimeType": "application/vnd.shoppinglist"
+            }
+          ],
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ]
+        }
+      ],
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-file-system",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Shopping List to access your photos.",
+          "cameraPermission": "Allow Shopping List to use your camera to take product photos."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "437fd496-c693-4d83-a5a0-5c6f42cec573"
+      }
     }
   }
 }

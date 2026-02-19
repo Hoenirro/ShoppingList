@@ -1,192 +1,120 @@
 // screens/PriceHistoryScreen.tsx
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
-import { MasterItem, PriceRecord } from '../types';
+import { MasterItem } from '../types';
+import { useTheme } from '../theme/ThemeContext';
+import { makeCommonStyles, makeShadow } from '../theme/theme';
 
 export default function PriceHistoryScreen({ route, navigation }: any) {
-  const { masterItemId, itemName } = route.params;
+  const { masterItemId } = route.params;
+  const { theme } = useTheme();
+  const c = makeCommonStyles(theme);
   const [item, setItem] = useState<MasterItem | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
   useEffect(() => {
-    loadItem();
+    ShoppingListStorage.getAllMasterItems().then(items => {
+      setItem(items.find(i => i.id === masterItemId) || null);
+    });
   }, []);
 
-  const loadItem = async () => {
-    const items = await ShoppingListStorage.getAllMasterItems();
-    const foundItem = items.find(i => i.id === masterItemId);
-    setItem(foundItem || null);
-  };
+  if (!item) return <View style={c.screen} />;
 
-  if (!item) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
+  const variant = item.variants[selectedVariantIndex];
+  if (!variant) return <View style={c.screen}><Text style={{ color: theme.textMuted, margin: 20 }}>No variant found</Text></View>;
 
-  const selectedVariant = item.variants[selectedVariantIndex];
-  
-  if (!selectedVariant) {
-    return (
-      <View style={styles.container}>
-        <Text>No variants found</Text>
-      </View>
-    );
-  }
-
-  // Calculate statistics for selected variant
-  const prices = selectedVariant.priceHistory?.map(p => p.price) || [];
-  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
-  const averagePrice = prices.length > 0 
-    ? prices.reduce((a, b) => a + b, 0) / prices.length 
-    : 0;
-  
-  // Get last purchase
-  const lastPurchase = selectedVariant.priceHistory?.[selectedVariant.priceHistory.length - 1];
-
-  // Sort history by date (newest first)
-  const sortedHistory = [...(selectedVariant.priceHistory || [])].sort((a, b) => b.date - a.date);
-
-  const renderVariantSelector = () => {
-    if (item.variants.length <= 1) return null;
-
-    return (
-      <View style={styles.variantSelector}>
-        <Text style={styles.variantLabel}>Select Brand:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.variantScroll}>
-          {item.variants.map((variant, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.variantChip,
-                selectedVariantIndex === index && styles.selectedVariantChip
-              ]}
-              onPress={() => setSelectedVariantIndex(index)}
-            >
-              <Text style={[
-                styles.variantChipText,
-                selectedVariantIndex === index && styles.selectedVariantChipText
-              ]}>
-                {variant.brand}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  };
+  const prices = variant.priceHistory?.map(p => p.price) || [];
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+  const avgPrice = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+  const sorted = [...(variant.priceHistory || [])].sort((a, b) => b.date - a.date);
+  const last = sorted[0];
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        {renderVariantSelector()}
+    <ScrollView style={c.screen} contentContainerStyle={styles.scroll}>
+      <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
+        <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+        {item.variants.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {item.variants.map((v, i) => (
+              <TouchableOpacity key={i} style={[c.chip, i === selectedVariantIndex && c.chipSelected]} onPress={() => setSelectedVariantIndex(i)}>
+                <Text style={[c.chipText, i === selectedVariantIndex && c.chipTextSelected]}>{v.brand}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
-      {/* Last Purchase Section */}
-      {lastPurchase && (
-        <View style={styles.lastPurchaseContainer}>
-          <Text style={styles.sectionTitle}>Last Purchase - {selectedVariant.brand}</Text>
-          <View style={styles.lastPurchaseCard}>
-            <View style={styles.lastPurchaseRow}>
-              <Text style={styles.lastPurchaseLabel}>Date:</Text>
-              <Text style={styles.lastPurchaseValue}>
-                {new Date(lastPurchase.date).toLocaleDateString()} at{' '}
-                {new Date(lastPurchase.date).toLocaleTimeString()}
-              </Text>
-            </View>
-            <View style={styles.lastPurchaseRow}>
-              <Text style={styles.lastPurchaseLabel}>Price:</Text>
-              <Text style={styles.lastPurchasePrice}>
-                ${(lastPurchase.price || 0).toFixed(2)}
-              </Text>
-            </View>
-            {lastPurchase.listName && (
-              <View style={styles.lastPurchaseRow}>
-                <Text style={styles.lastPurchaseLabel}>List:</Text>
-                <Text style={styles.lastPurchaseList}>{lastPurchase.listName}</Text>
-              </View>
-            )}
-            {lastPurchase.receiptImageUri && (
-              <TouchableOpacity 
-                style={styles.receiptButton}
-                onPress={() => {
-                  if (lastPurchase.listId) {
-                    navigation.navigate('SessionDetails', { sessionId: lastPurchase.listId });
-                  }
-                }}
-              >
-                <Text style={styles.receiptButtonText}>View Receipt 🧾</Text>
-              </TouchableOpacity>
-            )}
+      {/* Stats */}
+      <View style={[styles.statsRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {[
+          { label: 'Average', value: avgPrice, color: theme.text },
+          { label: 'Lowest', value: minPrice, color: theme.success },
+          { label: 'Highest', value: maxPrice, color: theme.danger },
+        ].map(s => (
+          <View key={s.label} style={styles.statBox}>
+            <Text style={[styles.statValue, { color: s.color }]}>${s.value.toFixed(2)}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSubtle }]}>{s.label}</Text>
           </View>
+        ))}
+      </View>
+
+      {/* Last purchase */}
+      {last && (
+        <View style={[c.card, { marginHorizontal: 14 }]}>
+          <Text style={[c.sectionTitle, { color: theme.success }]}>Last Purchase</Text>
+          <TouchableOpacity
+            style={c.spaceBetween}
+            onPress={() => last.listId && navigation.navigate('SessionDetails', { sessionId: last.listId })}
+            activeOpacity={last.listId ? 0.7 : 1}
+          >
+            <View>
+              <Text style={[styles.lastDate, { color: theme.text }]}>{new Date(last.date).toLocaleDateString()}</Text>
+              {last.listName && <Text style={[styles.lastSub, { color: theme.textMuted }]}>{last.listName}</Text>}
+              {last.listId && <Text style={[styles.lastSub, { color: theme.accent }]}>Tap to view trip →</Text>}
+            </View>
+            <Text style={[styles.lastPrice, { color: theme.accent }]}>${last.price.toFixed(2)}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Statistics */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Average</Text>
-          <Text style={styles.statValue}>${averagePrice.toFixed(2)}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Min</Text>
-          <Text style={[styles.statValue, styles.minPrice]}>${minPrice.toFixed(2)}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Max</Text>
-          <Text style={[styles.statValue, styles.maxPrice]}>${maxPrice.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      {/* Full History */}
-      <View style={styles.historyContainer}>
-        <Text style={styles.sectionTitle}>Price History - {selectedVariant.brand}</Text>
-        
-        {sortedHistory.length === 0 ? (
-          <Text style={styles.noHistory}>No price history yet</Text>
+      {/* Full history */}
+      <View style={[c.card, { marginHorizontal: 14 }]}>
+        <Text style={c.sectionTitle}>Price History — {variant.brand}</Text>
+        {sorted.length === 0 ? (
+          <Text style={[styles.noHistory, { color: theme.textSubtle }]}>No history yet</Text>
         ) : (
-          sortedHistory.map((record, index) => (
-            <View key={index} style={styles.historyItem}>
-              <View style={styles.historyLeft}>
-                <Text style={styles.historyDate}>
-                  {new Date(record.date).toLocaleDateString()}
-                </Text>
-                <Text style={styles.historyTime}>
-                  {new Date(record.date).toLocaleTimeString()}
-                </Text>
-                {record.listName && (
-                  <Text style={styles.historyList}>{record.listName}</Text>
-                )}
-              </View>
-              
-              <View style={styles.historyRight}>
-                <Text style={styles.historyPrice}>${(record.price || 0).toFixed(2)}</Text>
-                {record.receiptImageUri && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (record.listId) {
-                        navigation.navigate('SessionDetails', { sessionId: record.listId });
-                      }
-                    }}
-                  >
-                    <Text style={styles.receiptIcon}>🧾</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ))
+          sorted.map((record, i) => {
+            const prev = sorted[i + 1];
+            const delta = prev ? record.price - prev.price : 0;
+            const tappable = !!record.listId;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.historyRow, { borderBottomColor: theme.divider }, tappable && { backgroundColor: theme.chip + '55' }]}
+                onPress={() => tappable && navigation.navigate('SessionDetails', { sessionId: record.listId })}
+                activeOpacity={tappable ? 0.7 : 1}
+              >
+                <View>
+                  <Text style={[styles.historyDate, { color: theme.text }]}>{new Date(record.date).toLocaleDateString()}</Text>
+                  {record.listName && <Text style={[styles.historySub, { color: theme.textMuted }]}>{record.listName}</Text>}
+                  {tappable && <Text style={[styles.historySub, { color: theme.accent }]}>View trip →</Text>}
+                </View>
+                <View style={styles.historyRight}>
+                  {delta !== 0 && (
+                    <Text style={[styles.delta, { color: delta > 0 ? theme.danger : theme.success }]}>
+                      {delta > 0 ? '↑' : '↓'}${Math.abs(delta).toFixed(2)}
+                    </Text>
+                  )}
+                  <Text style={[styles.historyPrice, { color: theme.accent }]}>${record.price.toFixed(2)}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
         )}
       </View>
     </ScrollView>
@@ -194,177 +122,22 @@ export default function PriceHistoryScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  itemName: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  variantSelector: {
-    width: '100%',
-  },
-  variantLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  variantScroll: {
-    flexDirection: 'row',
-  },
-  variantChip: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  selectedVariantChip: {
-    backgroundColor: '#007AFF',
-  },
-  variantChipText: {
-    color: '#666',
-    fontWeight: '500',
-  },
-  selectedVariantChipText: {
-    color: '#fff',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#333',
-  },
-  lastPurchaseContainer: {
-    backgroundColor: '#fff',
-    marginTop: 16,
-    padding: 16,
-  },
-  lastPurchaseCard: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 16,
-  },
-  lastPurchaseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  lastPurchaseLabel: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  lastPurchaseValue: {
-    fontSize: 14,
-    color: '#333',
-  },
-  lastPurchasePrice: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  lastPurchaseList: {
-    fontSize: 14,
-    color: '#007AFF',
-  },
-  receiptButton: {
-    backgroundColor: '#f0f0f0',
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  receiptButtonText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginTop: 16,
-    padding: 16,
-    justifyContent: 'space-around',
-  },
-  statBox: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  minPrice: {
-    color: '#4CAF50',
-  },
-  maxPrice: {
-    color: '#ff3b30',
-  },
-  historyContainer: {
-    backgroundColor: '#fff',
-    marginTop: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  noHistory: {
-    textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    paddingVertical: 20,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  historyLeft: {
-    flex: 1,
-  },
-  historyDate: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  historyTime: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  historyList: {
-    fontSize: 12,
-    color: '#007AFF',
-    marginTop: 2,
-  },
-  historyRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  historyPrice: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginRight: 12,
-  },
-  receiptIcon: {
-    fontSize: 20,
-  },
+  scroll: { paddingBottom: 40 },
+  header: { padding: 16, borderBottomWidth: 1 },
+  itemName: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
+  chips: { flexDirection: 'row', gap: 8 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, marginHorizontal: 14, marginVertical: 14, borderRadius: 14, borderWidth: 1 },
+  statBox: { alignItems: 'center' },
+  statValue: { fontSize: 20, fontWeight: '700', marginBottom: 3 },
+  statLabel: { fontSize: 11, fontWeight: '600' },
+  lastDate: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  lastSub: { fontSize: 12 },
+  lastPrice: { fontSize: 26, fontWeight: '800' },
+  noHistory: { textAlign: 'center', paddingVertical: 20, fontSize: 14 },
+  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
+  historyDate: { fontSize: 15, fontWeight: '500' },
+  historySub: { fontSize: 12, marginTop: 2 },
+  historyRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  delta: { fontSize: 12, fontWeight: '600' },
+  historyPrice: { fontSize: 17, fontWeight: '700' },
 });

@@ -1,4 +1,3 @@
-// types.ts
 export interface PriceRecord {
   price: number;
   date: number;
@@ -9,9 +8,9 @@ export interface PriceRecord {
 
 export interface MasterItem {
   id: string;
-  name: string; // Product name (e.g., "Milk")
-  variants: BrandVariant[]; // Array of brand variants
-  defaultVariantIndex: number; // Which variant to show by default
+  name: string;
+  variants: BrandVariant[];
+  defaultVariantIndex: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -91,6 +90,7 @@ export interface ActiveSession {
 
 export type RootStackParamList = {
   Welcome: undefined;
+  Theme: undefined;
   ItemManager: undefined;
   ShoppingList: { listId: string };
   ActiveList: { listId: string };
