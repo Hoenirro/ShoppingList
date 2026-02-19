@@ -1,97 +1,74 @@
-# Shopping List 🛒
-A clean, efficient, and user-friendly application designed to help users manage their daily groceries and shopping needs. Organize your errands, track your spending, and never forget an item again.
+# 🛒 ShoppingList
 
-# 🚀 Features
-Quick Add: Add items to your list in seconds.
+[![License: Custom](https://img.shields.io/badge/License-Personal_Use_Only-orange.svg)](https://github.com/Hoenirro/ShoppingList)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/Hoenirro/ShoppingList/graphs/commit-activity)
 
-Categorization: Group items by aisle or category (Dairy, Produce, etc.).
+A streamlined application to manage, organize, and track your shopping needs. Built for efficiency and ease of use.
 
-Real-time Updates: Stay synced across your devices.
+---
 
-Progress Tracking: Check off items as you shop.
+## 🚀 Getting Started
 
-Custom Themes: Choose between Light and Dark modes for comfortable viewing.
+Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
 
-# 🛠️ Installation
-Follow these steps to get the project running on your local machine:
+### Prerequisites
+Before you begin, ensure you have the following installed:
+* [Git](https://git-scm.com/)
+* Appropriate runtime for this project (e.g., Node.js, JDK, or Python)
 
-# Prerequisites
-List what the user needs before starting, for example:
+### Installation
+1. **Clone the repository**
+   ```bash
+   git clone [https://github.com/Hoenirro/ShoppingList.git](https://github.com/Hoenirro/ShoppingList.git)
+   ```
 
-Node.js (v14+) or Android Studio
+2. **Install Dependencies and launch the app**
+  ```bash
+  npm install
+  npm start
+  ```
+## 🗺️ Roadmap (To-Do)
 
-Git
-
-Setup
-Clone the repository:
-
-Bash
-git clone https://github.com/Hoenirro/ShoppingList.git
-Navigate to the directory:
-
-Bash
-cd ShoppingList
-Install dependencies:
-
-Bash
-# If using NPM:
-npm install
-
-# Or if using Gradle (Android):
-./gradlew build
-Run the application:
-
-Bash
-# If using NPM:
-npm start
-# 🗺️ Roadmap (To-Do)
 This project is under active development. Here is what is planned for the future:
 
-[ ] Phase 1: Core Enhancements
+### Phase 1: Core Enhancements
+- [ ] **User Authentication:** Implement secure Login/Signup functionality.
+- [ ] **Price Sorting:** Add "Sort by Price" functionality to optimize shopping.
 
-[ ] Implement user authentication (Login/Signup).
+### Phase 2: Social Features
+- [ ] **List Sharing:** Share lists with family or roommates via a unique link.
+- [ ] **Real-time Collaboration:** Enable collaborative editing so multiple users can update a list simultaneously.
 
-[ ] Add "Sort by Price" functionality.
-
-[ ] Phase 2: Social Features
-
-[ ] Share lists with family or roommates via link.
-
-[ ] Collaborative real-time editing.
-
-[ ] Phase 3: Advanced Tools
-
-[ ] Integrate a barcode scanner to add items.
-
-[ ] Receipt OCR (scanning physical receipts to update the list).
-
-[ ] Export list to PDF or CSV.
+### Phase 3: Advanced Tools
+- [ ] **Barcode Scanner:** Integrate a scanner to add items quickly by scanning their UPC.
+- [ ] **Receipt OCR:** Optical Character Recognition to scan physical receipts and update the list automatically.
+- [ ] **Data Export:** Options to export the shopping list to PDF or CSV formats.
 
 # 📜 License & Usage
 This project is provided under a Restricted Personal Use License.
 
-✅ Use: You are free to download and use this application for personal purposes.
+- ✅ Use: You are free to download and use this application for personal purposes.
 
-✅ Modify: You are free to modify the source code for your own personal use.
+- ✅ Modify: You are free to modify the source code for your own personal use.
 
-❌ Distribute: You may not redistribute the original or modified source code, or host the application for public use, without explicit permission from the owner (@Hoenirro).
+- ❌ Distribute: You may not redistribute the original or modified source code, or host the application for public use, without explicit permission from the owner (***@Hoenirro***).
 
 # 🤝 Contributing
 Contributions are welcome for personal improvements! If you find a bug, please open an Issue. If you want to contribute a feature, feel free to submit a Pull Request.
 
-Fork the Project
+1. Fork the Project
 
-Create your Feature Branch (git checkout -b feature/AmazingFeature)
+2. Create your Feature Branch (git checkout -b feature/AmazingFeature)
 
-Commit your Changes (git commit -m 'Add some AmazingFeature')
+3. Commit your Changes (git commit -m 'Add some AmazingFeature')
 
-Push to the Branch (git push origin feature/AmazingFeature)
+4. Push to the Branch (git push origin feature/AmazingFeature)
 
-Open a Pull Request
+5. Open a Pull Request
 
 📧 Contact
+```
 Hoenirro - GitHub Profile
-
 Project Link: https://github.com/Hoenirro/ShoppingList
-
-Generated with ❤️ for the ShoppingList community.
+Generated with ❤️
+```
