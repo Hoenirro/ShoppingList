@@ -1,126 +1,90 @@
-// screens/ItemManagerScreen.tsx
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  Alert,
-  TextInput,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, TextInput, StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
 import { MasterItem } from '../types';
+import { useTheme } from '../theme/ThemeContext';
+import { makeCommonStyles, makeShadow } from '../theme/theme';
 
 export default function ItemManagerScreen({ navigation }: any) {
+  const { theme } = useTheme();
+  const c = makeCommonStyles(theme);
   const [items, setItems] = useState<MasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useFocusEffect(
-    useCallback(() => {
-      loadItems();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { loadItems(); }, []));
 
   const loadItems = async () => {
-    const loadedItems = await ShoppingListStorage.getAllMasterItems();
-    setItems(loadedItems);
-  };
-
-  const handleEditItem = (item?: MasterItem) => {
-    navigation.navigate('EditMasterItem', { 
-      itemId: item?.id,
-      returnTo: 'ItemManager'
-    });
+    setItems(await ShoppingListStorage.getAllMasterItems());
   };
 
   const handleDeleteItem = (item: MasterItem) => {
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}" from your master catalog?\n\nThis will remove ALL brand variants.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await ShoppingListStorage.deleteMasterItem(item.id);
-            loadItems();
-          },
-        },
-      ]
-    );
+    Alert.alert('Delete Product', `Delete "${item.name}" and all its brands?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => { await ShoppingListStorage.deleteMasterItem(item.id); loadItems(); },
+      },
+    ]);
   };
 
-  const filteredItems = items.filter(item => {
-    const matchesName = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesBrand = item.variants.some(v => 
-      v.brand.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    return matchesName || matchesBrand;
-  });
+  const filteredItems = items.filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.variants.some(v => v.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const renderItem = ({ item }: { item: MasterItem }) => {
     const defaultVariant = item.variants[item.defaultVariantIndex || 0];
-    const brandCount = item.variants.length;
     const lowestPrice = Math.min(...item.variants.map(v => v.defaultPrice || 0));
-    const avgPrice = item.variants.reduce((sum, v) => sum + (v.averagePrice || 0), 0) / brandCount;
+    const avgPrice = item.variants.reduce((s, v) => s + (v.averagePrice || 0), 0) / item.variants.length;
 
     return (
-      <View style={styles.itemContainer}>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('PriceHistory', { 
-            masterItemId: item.id, 
-            itemName: item.name 
-          })}
-        >
+      <View style={[c.card, styles.itemRow]}>
+        <TouchableOpacity onPress={() => navigation.navigate('PriceHistory', { masterItemId: item.id, itemName: item.name })}>
           {defaultVariant?.imageUri ? (
-            <Image source={{ uri: defaultVariant.imageUri }} style={styles.thumbnail} />
+            <Image source={{ uri: defaultVariant.imageUri }} style={c.thumbnail} />
           ) : (
-            <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
-              <Text style={styles.placeholderText}>📷</Text>
+            <View style={[c.thumbnail, c.placeholder]}>
+              <Text style={{ fontSize: 24 }}>📦</Text>
             </View>
           )}
         </TouchableOpacity>
-        
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemBrand}>
-            {brandCount} brand{brandCount !== 1 ? 's' : ''}
+
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+          <Text style={[styles.itemSub, { color: theme.textMuted }]}>
+            {item.variants.length} brand{item.variants.length !== 1 ? 's' : ''}
           </Text>
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceLabel}>From: </Text>
-            <Text style={styles.priceValue}>${lowestPrice.toFixed(2)}</Text>
-            <Text style={styles.priceLabel}>  Avg: </Text>
-            <Text style={styles.priceValue}>${avgPrice.toFixed(2)}</Text>
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceTag, { color: theme.accent, backgroundColor: theme.chip }]}>
+              From ${lowestPrice.toFixed(2)}
+            </Text>
+            <Text style={[styles.priceTag, { color: theme.textMuted, backgroundColor: theme.chip }]}>
+              Avg ${avgPrice.toFixed(2)}
+            </Text>
           </View>
         </View>
-        
-        <View style={styles.actionButtons}>
+
+        <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.historyButton]}
-            onPress={() => navigation.navigate('PriceHistory', { 
-              masterItemId: item.id, 
-              itemName: item.name 
-            })}
+            style={[styles.iconBtn, { backgroundColor: theme.success + '22' }]}
+            onPress={() => navigation.navigate('PriceHistory', { masterItemId: item.id, itemName: item.name })}
           >
-            <Text style={styles.historyButtonText}>📊</Text>
+            <Text style={{ fontSize: 14 }}>📊</Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => handleEditItem(item)}
+            style={[styles.iconBtn, { backgroundColor: theme.chip }]}
+            onPress={() => navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'ItemManager' })}
           >
-            <Text style={styles.editButtonText}>✎</Text>
+            <Text style={{ color: theme.textMuted, fontSize: 14 }}>✎</Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
+            style={[styles.iconBtn, { backgroundColor: theme.danger + '22' }]}
             onPress={() => handleDeleteItem(item)}
           >
-            <Text style={styles.deleteButtonText}>🗑</Text>
+            <Text style={{ fontSize: 14 }}>🗑</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -128,35 +92,35 @@ export default function ItemManagerScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={c.screen}>
+      <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
+
+      <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
         <TextInput
-          style={styles.searchInput}
-          placeholder="Search items or brands..."
+          style={[c.input, { flex: 1, marginRight: 10 }]}
+          placeholder="Search items or brands…"
+          placeholderTextColor={theme.placeholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
         />
-        
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => handleEditItem()}
+          style={[c.primaryButton, { paddingHorizontal: 16 }]}
+          onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'ItemManager' })}
         >
-          <Text style={styles.addButtonText}>+ Create New Master Item</Text>
+          <Text style={c.primaryButtonText}>+ New</Text>
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={filteredItems}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No master items yet</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Try a different search' : 'Create your first master item!'}
-            </Text>
+          <View style={c.emptyContainer}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>📦</Text>
+            <Text style={c.emptyText}>{searchQuery ? 'No results' : 'No products yet'}</Text>
+            <Text style={c.emptySubtext}>{searchQuery ? 'Try a different search' : 'Tap "+ New" to create one'}</Text>
           </View>
         }
       />
@@ -165,137 +129,12 @@ export default function ItemManagerScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchInput: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 12,
-    color: '#333',
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 16,
-  },
-  itemContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  thumbnail: {
-    width: 50,
-    height: 50,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  placeholderThumbnail: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 24,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-    color: '#333',
-  },
-  itemBrand: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  priceLabel: {
-    fontSize: 12,
-    color: '#999',
-  },
-  priceValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#007AFF',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  historyButton: {
-    backgroundColor: '#4CAF50',
-  },
-  historyButtonText: {
-    fontSize: 18,
-    color: '#fff',
-  },
-  editButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  editButtonText: {
-    fontSize: 18,
-    color: '#666',
-  },
-  deleteButton: {
-    backgroundColor: '#ff3b30',
-  },
-  deleteButtonText: {
-    fontSize: 18,
-    color: '#fff',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-  },
+  topBar: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },
+  itemRow: { flexDirection: 'row', alignItems: 'center' },
+  itemName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  itemSub: { fontSize: 12, marginBottom: 6 },
+  priceRow: { flexDirection: 'row', gap: 6 },
+  priceTag: { fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  actions: { flexDirection: 'column', gap: 6, marginLeft: 8 },
+  iconBtn: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 });

@@ -513,7 +513,36 @@ static async addPriceToVariantHistory(
   }
 }
 
-static async saveActiveSession(session: ActiveSession): Promise<void> {
+// ─── Called after session is saved to backfill the real session ID ───────────
+  static async updateLatestPriceHistorySessionId(
+    masterItemId: string,
+    variantIndex: number,
+    sessionId: string,
+    receiptImageUri?: string,
+  ): Promise<void> {
+    try {
+      const items = await this.getAllMasterItems();
+      const item = items.find(i => i.id === masterItemId);
+      if (!item) return;
+
+      const variant = item.variants[variantIndex];
+      if (!variant || !variant.priceHistory?.length) return;
+
+      // The latest record is the one we just added during this shopping trip —
+      // it has no listId yet, so we stamp it with the session ID now
+      const latest = variant.priceHistory[variant.priceHistory.length - 1];
+      if (!latest.listId) {
+        latest.listId = sessionId;
+        if (receiptImageUri) latest.receiptImageUri = receiptImageUri;
+        item.updatedAt = Date.now();
+        await this.saveMasterItem(item);
+      }
+    } catch (error) {
+      console.error('Error updating price history session ID:', error);
+    }
+  }
+
+  static async saveActiveSession(session: ActiveSession): Promise<void> {
   try {
     const file = new FileSystem.File(Paths.document, 'active_session.json');
     await file.write(JSON.stringify(session, null, 2));

@@ -1,221 +1,110 @@
-// screens/SelectMasterItemScreen.tsx
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Alert, StatusBar } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
 import { MasterItem } from '../types';
+import { useTheme } from '../theme/ThemeContext';
+import { makeCommonStyles } from '../theme/theme';
 
 export default function SelectMasterItemScreen({ route, navigation }: any) {
   const { listId } = route.params;
+  const { theme } = useTheme();
+  const c = makeCommonStyles(theme);
   const [items, setItems] = useState<MasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
 
-  useFocusEffect(
-    useCallback(() => {
-      loadItems();
-      loadCurrentListItems();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => {
+    loadItems();
+    loadCurrentListItems();
+  }, []));
 
   const loadCurrentListItems = async () => {
     const lists = await ShoppingListStorage.getAllLists();
-    const currentList = lists.find(l => l.id === listId);
-    if (currentList) {
-      // Create a Set of composite keys or just masterItemIds for simple check
-      // For simplicity, we'll just check if any variant of this item is in the list
-      const addedIds = new Set(currentList.items.map(item => item.masterItemId));
-      setAddedItemIds(addedIds);
-    }
+    const list = lists.find(l => l.id === listId);
+    if (list) setAddedItemIds(new Set(list.items.map(i => i.masterItemId)));
   };
 
-  const loadItems = async () => {
-    const loadedItems = await ShoppingListStorage.getAllMasterItems();
-    setItems(loadedItems);
-  };
+  const loadItems = async () => setItems(await ShoppingListStorage.getAllMasterItems());
 
   const handleAddItem = async (item: MasterItem) => {
-    if (addedItemIds.has(item.id)) {
-      Alert.alert('Already Added', `${item.name} is already in this list`);
-      return;
-    }
-    
-    // If item has multiple variants, navigate to variant selection
-    if (item.variants.length > 1) {
-      navigation.navigate('EditListItem', {
-        listId,
-        masterItemId: item.id,
-        variantIndex: 0
-      });
-      return;
-    }
-    
-    // Otherwise add the default variant
+    if (addedItemIds.has(item.id)) { Alert.alert('Already Added', `${item.name} is already in this list`); return; }
+    if (item.variants.length > 1) { navigation.navigate('EditListItem', { listId, masterItemId: item.id, variantIndex: 0 }); return; }
     await ShoppingListStorage.addMasterItemToList(listId, item.id, 0);
-    
-    // Update local state to show item as added
     setAddedItemIds(prev => new Set(prev).add(item.id));
-    
-    // Notify parent to refresh if callback exists
-    if (route.params?.onGoBack) {
-      route.params.onGoBack();
-    }
-    loadItems();
+    if (route.params?.onGoBack) route.params.onGoBack();
   };
 
   const handleRemoveItem = async (item: MasterItem) => {
-    Alert.alert(
-      'Remove Item',
-      `Remove all variants of "${item.name}" from this shopping list?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            // Get current list
-            const lists = await ShoppingListStorage.getAllLists();
-            const currentList = lists.find(l => l.id === listId);
-            
-            if (currentList) {
-              // Filter out all variants of this item
-              const updatedItems = currentList.items.filter(
-                listItem => listItem.masterItemId !== item.id
-              );
-              
-              const updatedList = {
-                ...currentList,
-                items: updatedItems,
-                updatedAt: Date.now(),
-              };
-              
-              await ShoppingListStorage.saveList(updatedList);
-              
-              // Update local state
-              setAddedItemIds(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(item.id);
-                return newSet;
-              });
-              
-              // Notify parent to refresh
-              if (route.params?.onGoBack) {
-                route.params.onGoBack();
-              }
-              loadItems();
-            }
-          },
+    Alert.alert('Remove Item', `Remove "${item.name}" from this list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          const lists = await ShoppingListStorage.getAllLists();
+          const list = lists.find(l => l.id === listId);
+          if (list) {
+            await ShoppingListStorage.saveList({ ...list, items: list.items.filter(i => i.masterItemId !== item.id), updatedAt: Date.now() });
+            setAddedItemIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const handleCreateNew = () => {
-    navigation.navigate('EditMasterItem', { 
-      returnTo: 'SelectMasterItem',
-      listId: listId
-    });
-  };
-
-  const filteredItems = items.filter(item => {
-    // Search in item name and all variant brands
-    const matchesName = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesBrand = item.variants.some(v => 
-      v.brand.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    return matchesName || matchesBrand;
-  });
+  const filtered = items.filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.variants.some(v => v.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const renderItem = ({ item }: { item: MasterItem }) => {
-    const defaultVariant = item.variants[item.defaultVariantIndex || 0];
     const isAdded = addedItemIds.has(item.id);
-    
-    // Get all unique brands for display
-    const brandList = item.variants.map(v => v.brand).join(', ');
-    const lowestPrice = item.variants?.length > 0
-  ? Math.min(...item.variants.map(v => v.defaultPrice || 0).filter(p => !isNaN(p)))
-  : 0;
-    
+    const defaultVariant = item.variants[item.defaultVariantIndex || 0];
+    const lowestPrice = item.variants.length > 0 ? Math.min(...item.variants.map(v => v.defaultPrice || 0)) : 0;
+
     return (
-      <View style={[styles.itemContainer, isAdded && styles.addedItemContainer]}>
-        {/* Show default variant's image */}
+      <View style={[c.card, styles.row, isAdded && { opacity: 0.7 }]}>
         {defaultVariant?.imageUri ? (
-          <Image source={{ uri: defaultVariant.imageUri }} style={styles.thumbnail} />
+          <Image source={{ uri: defaultVariant.imageUri }} style={c.thumbnail} />
         ) : (
-          <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
-            <Text style={styles.placeholderText}>📷</Text>
-          </View>
+          <View style={[c.thumbnail, c.placeholder]}><Text style={{ fontSize: 22 }}>📦</Text></View>
         )}
-        
-        <View style={styles.itemInfo}>
-          <Text style={[styles.itemName, isAdded && styles.addedText]}>
-            {item.name}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.itemName, { color: isAdded ? theme.textSubtle : theme.text }]}>{item.name}</Text>
+          <Text style={[styles.itemSub, { color: theme.textMuted }]} numberOfLines={1}>
+            {item.variants.map(v => v.brand).join(', ')}
           </Text>
-          <Text style={[styles.itemBrand, isAdded && styles.addedText]} numberOfLines={1}>
-            {brandList}
-          </Text>
-          <Text style={[styles.itemPrice, isAdded && styles.addedText]}>
-  From ${lowestPrice?.toFixed(2) ?? '0.00'}
-</Text>
+          <Text style={[styles.itemPrice, { color: theme.accent }]}>From ${lowestPrice.toFixed(2)}</Text>
         </View>
-        
-        {isAdded ? (
-          <TouchableOpacity
-            style={styles.removeIcon}
-            onPress={() => handleRemoveItem(item)}
-          >
-            <Text style={styles.removeIconText}>−</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.addIcon}
-            onPress={() => handleAddItem(item)}
-          >
-            <Text style={styles.addIconText}>+</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[styles.toggleBtn, { backgroundColor: isAdded ? theme.danger + '22' : theme.success + '22' }]}
+          onPress={() => isAdded ? handleRemoveItem(item) : handleAddItem(item)}
+        >
+          <Text style={[styles.toggleBtnText, { color: isAdded ? theme.danger : theme.success }]}>
+            {isAdded ? '−' : '+'}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search items or brands..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={handleCreateNew}
-        >
-          <Text style={styles.createButtonText}>+ Create New Item</Text>
+    <View style={c.screen}>
+      <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
+      <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
+        <TextInput style={[c.input, { flex: 1, marginRight: 10 }]} placeholder="Search…" placeholderTextColor={theme.placeholder} value={searchQuery} onChangeText={setSearchQuery} />
+        <TouchableOpacity style={[c.primaryButton, { paddingHorizontal: 14 }]} onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'SelectMasterItem', listId })}>
+          <Text style={c.primaryButtonText}>+ New</Text>
         </TouchableOpacity>
       </View>
-
       <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
+        data={filtered} keyExtractor={item => item.id} renderItem={renderItem}
+        contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No master items found</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Try a different search' : 'Create your first item!'}
-            </Text>
+          <View style={c.emptyContainer}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>🔍</Text>
+            <Text style={c.emptyText}>{searchQuery ? 'No results' : 'No products yet'}</Text>
+            <Text style={c.emptySubtext}>Create products first in Item Manager</Text>
           </View>
         }
       />
@@ -224,129 +113,11 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchInput: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  createButton: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  createButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 16,
-  },
-  itemContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  addedItemContainer: {
-    backgroundColor: '#f8f8f8',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  thumbnail: {
-    width: 50,
-    height: 50,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  placeholderThumbnail: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 24,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  itemBrand: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  itemPrice: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
-  addedText: {
-    color: '#999',
-  },
-  addIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addIconText: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  removeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ff3b30',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeIconText: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-  },
+  topBar: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  itemName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  itemSub: { fontSize: 12, marginBottom: 4 },
+  itemPrice: { fontSize: 13, fontWeight: '600' },
+  toggleBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  toggleBtnText: { fontSize: 24, fontWeight: '600', lineHeight: 28 },
 });
