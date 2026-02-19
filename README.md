@@ -1,7 +1,7 @@
-Shopping List 🛒
+# Shopping List 🛒
 A clean, efficient, and user-friendly application designed to help users manage their daily groceries and shopping needs. Organize your errands, track your spending, and never forget an item again.
 
-🚀 Features
+# 🚀 Features
 Quick Add: Add items to your list in seconds.
 
 Categorization: Group items by aisle or category (Dairy, Produce, etc.).
@@ -12,10 +12,10 @@ Progress Tracking: Check off items as you shop.
 
 Custom Themes: Choose between Light and Dark modes for comfortable viewing.
 
-🛠️ Installation
+# 🛠️ Installation
 Follow these steps to get the project running on your local machine:
 
-Prerequisites
+# Prerequisites
 List what the user needs before starting, for example:
 
 Node.js (v14+) or Android Studio
@@ -44,7 +44,7 @@ Run the application:
 Bash
 # If using NPM:
 npm start
-🗺️ Roadmap (To-Do)
+# 🗺️ Roadmap (To-Do)
 This project is under active development. Here is what is planned for the future:
 
 [ ] Phase 1: Core Enhancements
@@ -67,7 +67,7 @@ This project is under active development. Here is what is planned for the future
 
 [ ] Export list to PDF or CSV.
 
-📜 License & Usage
+# 📜 License & Usage
 This project is provided under a Restricted Personal Use License.
 
 ✅ Use: You are free to download and use this application for personal purposes.
@@ -76,7 +76,7 @@ This project is provided under a Restricted Personal Use License.
 
 ❌ Distribute: You may not redistribute the original or modified source code, or host the application for public use, without explicit permission from the owner (@Hoenirro).
 
-🤝 Contributing
+# 🤝 Contributing
 Contributions are welcome for personal improvements! If you find a bug, please open an Issue. If you want to contribute a feature, feel free to submit a Pull Request.
 
 Fork the Project
