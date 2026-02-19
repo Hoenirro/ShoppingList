@@ -34,6 +34,7 @@ This project is under active development. Here is what is planned for the future
 ### Phase 1: Core Enhancements
 - [ ] **User Authentication:** Implement secure Login/Signup functionality.
 - [ ] **Price Sorting:** Add "Sort by Price" functionality to optimize shopping.
+- [x] **themes:** Add themes to the app so the user experience is more personalized.
 
 ### Phase 2: Social Features
 - [ ] **List Sharing:** Share lists with family or roommates via a unique link.
