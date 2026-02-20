@@ -255,23 +255,14 @@ export default function ActiveListScreen({ route, navigation }: any) {
           c.card, styles.itemRow,
           isChecked && { opacity: 0.55, backgroundColor: theme.chip },
         ]}>
-          {/* Thumbnail / category fallback — tap to edit item */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('EditMasterItem', {
-              itemId: item.masterItemId,
-              listId,
-              returnTo: 'ActiveList',
-            })}
-            activeOpacity={0.7}
-          >
-            {item.imageUri ? (
-              <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
-            ) : (
-              <View style={[c.thumbnail, c.placeholder]}>
-                <Text style={{ fontSize: 24 }}>{fallback}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {/* Thumbnail / category fallback */}
+          {item.imageUri ? (
+            <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
+          ) : (
+            <View style={[c.thumbnail, c.placeholder]}>
+              <Text style={{ fontSize: 24 }}>{fallback}</Text>
+            </View>
+          )}
 
           <View style={{ flex: 1 }}>
             <Text style={[
@@ -368,7 +359,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
         <View style={styles.headerBtns}>
           <TouchableOpacity
             style={[styles.smallBtn, { backgroundColor: theme.chip }]}
-            onPress={() => navigation.navigate('SelectMasterItem', { listId })}
+            onPress={() => navigation.navigate('ShoppingList', { listId })}
           >
             <Text style={[styles.smallBtnText, { color: theme.accent }]}>+ Add</Text>
           </TouchableOpacity>
@@ -392,7 +383,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
             <Text style={c.emptyText}>No items yet</Text>
             <TouchableOpacity
               style={[c.primaryButton, { marginTop: 16, paddingHorizontal: 24 }]}
-              onPress={() => navigation.navigate('SelectMasterItem', { listId })}
+              onPress={() => navigation.navigate('ShoppingList', { listId })}
             >
               <Text style={c.primaryButtonText}>Add Items</Text>
             </TouchableOpacity>
@@ -434,7 +425,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
                 ) : (
                   <TouchableOpacity onPress={() => setEditingActual(true)}>
                     <Text style={[styles.summaryValue, { color: theme.accent }]}>
-                      ${parseFloat(actualPaid || '0').toFixed(2)} ✎
+                      ${parseFloat(actualPaid || '0').toFixed(2)} ✎ no tax
                     </Text>
                   </TouchableOpacity>
                 )}

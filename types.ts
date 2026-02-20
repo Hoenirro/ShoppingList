@@ -97,7 +97,6 @@ export type RootStackParamList = {
   ItemManager: undefined;
   ShoppingList: { listId: string };
   ActiveList: { listId: string };
-  SelectMasterItem: { listId: string; onGoBack?: () => void };
   EditMasterItem: { itemId?: string; returnTo?: string; listId?: string; mode?: 'addToList' };
   PriceHistory: { masterItemId: string; itemName: string };
   History: undefined;

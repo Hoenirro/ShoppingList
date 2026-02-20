@@ -112,40 +112,18 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
     setIsSaving(true);
     try {
       const now = Date.now();
-      const safeVariantIdx = Math.min(selectedVariantIndex, variants.length - 1);
-      const savedItem: MasterItem = isEditing && originalItem
-        ? { ...originalItem, name: productName.trim(), category, variants, defaultVariantIndex: safeVariantIdx, updatedAt: now }
-        : { id: Date.now().toString(), name: productName.trim(), category, variants, defaultVariantIndex: 0, createdAt: now, updatedAt: now };
-
-      await ShoppingListStorage.saveMasterItem(savedItem);
-
-      // Sync snapshot fields (+ variantIndex) back to the list item when editing
-      // from either ShoppingList or ActiveList screens.
-      if (listId && (returnTo === 'ShoppingList' || returnTo === 'ActiveList')) {
-        const allLists = await ShoppingListStorage.getAllLists();
-        const list = allLists.find(l => l.id === listId);
-        if (list) {
-          const updatedItems = list.items.map(li => {
-            if (li.masterItemId !== savedItem.id) return li;
-            const newVariantIdx = Math.min(safeVariantIdx, savedItem.variants.length - 1);
-            const variant = savedItem.variants[newVariantIdx];
-            return {
-              ...li,
-              variantIndex: newVariantIdx,
-              name: savedItem.name,
-              brand: variant.brand,
-              lastPrice: variant.defaultPrice,
-              averagePrice: variant.averagePrice,
-              imageUri: variant.imageUri ?? li.imageUri,
-              category: savedItem.category,
-            };
-          });
-          await ShoppingListStorage.saveList({ ...list, items: updatedItems, updatedAt: now });
-        }
+      if (isEditing && originalItem) {
+        await ShoppingListStorage.saveMasterItem({
+          ...originalItem, name: productName.trim(), category,
+          variants, defaultVariantIndex: Math.min(selectedVariantIndex, variants.length - 1), updatedAt: now,
+        });
+      } else {
+        await ShoppingListStorage.saveMasterItem({
+          id: Date.now().toString(), name: productName.trim(), category,
+          variants, defaultVariantIndex: 0, createdAt: now, updatedAt: now,
+        });
       }
-
-      if (returnTo === 'SelectMasterItem' && listId) navigation.navigate('SelectMasterItem', { listId });
-      else navigation.goBack();
+      navigation.goBack();
     } catch (e) { Alert.alert('Error', 'Failed to save'); } finally { setIsSaving(false); }
   };
 
