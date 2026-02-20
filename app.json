@@ -20,9 +20,7 @@
           {
             "CFBundleTypeName": "Shopping List",
             "CFBundleTypeRole": "Editor",
-            "LSItemContentTypes": [
-              "com.shoppinglist.shoplist"
-            ],
+            "LSItemContentTypes": ["com.shoppinglist.shoplist"],
             "LSHandlerRank": "Owner"
           }
         ],
@@ -30,10 +28,7 @@
           {
             "UTTypeIdentifier": "com.shoppinglist.shoplist",
             "UTTypeDescription": "Shopping List",
-            "UTTypeConformsTo": [
-              "public.data",
-              "public.content"
-            ],
+            "UTTypeConformsTo": ["public.data", "public.content"],
             "UTTypeTagSpecification": {
               "public.filename-extension": ["shoplist"],
               "public.mime-type": "application/octet-stream"
@@ -50,12 +45,9 @@
       "package": "com.yourname.shoppinglist",
       "intentFilters": [
         {
-          "action": "android.intent.action.VIEW",
+          "action": "VIEW",
           "autoVerify": false,
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ],
+          "category": ["DEFAULT", "BROWSABLE"],
           "data": [
             {
               "scheme": "file",
@@ -65,31 +57,25 @@
           ]
         },
         {
-          "action": "android.intent.action.VIEW",
+          "action": "VIEW",
           "autoVerify": false,
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ],
-          "data": [
-            {
-              "scheme": "content",
-              "mimeType": "application/octet-stream"
-            }
-          ]
-        },
-        {
-          "action": "android.intent.action.VIEW",
-          "autoVerify": false,
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ],
+          "category": ["DEFAULT", "BROWSABLE"],
           "data": [
             {
               "scheme": "content",
               "mimeType": "*/*",
               "pathPattern": ".*\\.shoplist"
+            }
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "application/octet-stream"
             }
           ]
         }
