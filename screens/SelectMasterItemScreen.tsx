@@ -1,3 +1,4 @@
+// screens/SelectMasterItemScreen.tsx
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Alert, StatusBar } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -5,6 +6,7 @@ import { ShoppingListStorage } from '../utils/storage';
 import { MasterItem } from '../types';
 import { useTheme } from '../theme/ThemeContext';
 import { makeCommonStyles } from '../theme/theme';
+import { getCategoryEmoji } from '../utils/categories';
 
 export default function SelectMasterItemScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -13,6 +15,8 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
   const [items, setItems] = useState<MasterItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
+  // Which item's brand picker is currently expanded
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     loadItems();
@@ -27,12 +31,24 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
 
   const loadItems = async () => setItems(await ShoppingListStorage.getAllMasterItems());
 
-  const handleAddItem = async (item: MasterItem) => {
-    if (addedItemIds.has(item.id)) { Alert.alert('Already Added', `${item.name} is already in this list`); return; }
-    if (item.variants.length > 1) { navigation.navigate('EditListItem', { listId, masterItemId: item.id, variantIndex: 0 }); return; }
-    await ShoppingListStorage.addMasterItemToList(listId, item.id, 0);
+  const handleAddVariant = async (item: MasterItem, variantIndex: number) => {
+    await ShoppingListStorage.addMasterItemToList(listId, item.id, variantIndex);
     setAddedItemIds(prev => new Set(prev).add(item.id));
+    setExpandedItemId(null);
     if (route.params?.onGoBack) route.params.onGoBack();
+  };
+
+  const handlePlusTap = (item: MasterItem) => {
+    if (addedItemIds.has(item.id)) {
+      Alert.alert('Already Added', `${item.name} is already in this list`);
+      return;
+    }
+    if (item.variants.length > 1) {
+      // Toggle the inline brand picker
+      setExpandedItemId(prev => prev === item.id ? null : item.id);
+      return;
+    }
+    handleAddVariant(item, 0);
   };
 
   const handleRemoveItem = async (item: MasterItem) => {
@@ -44,7 +60,9 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
           const lists = await ShoppingListStorage.getAllLists();
           const list = lists.find(l => l.id === listId);
           if (list) {
-            await ShoppingListStorage.saveList({ ...list, items: list.items.filter(i => i.masterItemId !== item.id), updatedAt: Date.now() });
+            await ShoppingListStorage.saveList({
+              ...list, items: list.items.filter(i => i.masterItemId !== item.id), updatedAt: Date.now(),
+            });
             setAddedItemIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
           }
         },
@@ -59,31 +77,67 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
 
   const renderItem = ({ item }: { item: MasterItem }) => {
     const isAdded = addedItemIds.has(item.id);
+    const isExpanded = expandedItemId === item.id;
     const defaultVariant = item.variants[item.defaultVariantIndex || 0];
     const lowestPrice = item.variants.length > 0 ? Math.min(...item.variants.map(v => v.defaultPrice || 0)) : 0;
+    const fallback = getCategoryEmoji(item.category);
 
     return (
-      <View style={[c.card, styles.row, isAdded && { opacity: 0.7 }]}>
-        {defaultVariant?.imageUri ? (
-          <Image source={{ uri: defaultVariant.imageUri }} style={c.thumbnail} />
-        ) : (
-          <View style={[c.thumbnail, c.placeholder]}><Text style={{ fontSize: 22 }}>📦</Text></View>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.itemName, { color: isAdded ? theme.textSubtle : theme.text }]}>{item.name}</Text>
-          <Text style={[styles.itemSub, { color: theme.textMuted }]} numberOfLines={1}>
-            {item.variants.map(v => v.brand).join(', ')}
-          </Text>
-          <Text style={[styles.itemPrice, { color: theme.accent }]}>From ${lowestPrice.toFixed(2)}</Text>
+      <View style={[c.card, isAdded && { opacity: 0.7 }]}>
+        <View style={styles.row}>
+          {/* Thumbnail → Edit product */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'SelectMasterItem', listId })}
+            activeOpacity={0.7}
+          >
+            {defaultVariant?.imageUri ? (
+              <Image source={{ uri: defaultVariant.imageUri }} style={c.thumbnail} />
+            ) : (
+              <View style={[c.thumbnail, c.placeholder]}>
+                <Text style={{ fontSize: 24 }}>{fallback}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemName, { color: isAdded ? theme.textSubtle : theme.text }]}>{item.name}</Text>
+            <Text style={[styles.itemSub, { color: theme.textMuted }]} numberOfLines={1}>
+              {item.variants.map(v => v.brand).join(', ')}
+            </Text>
+            <Text style={[styles.itemPrice, { color: theme.accent }]}>From ${lowestPrice.toFixed(2)}</Text>
+          </View>
+
+          {/* + / − toggle */}
+          <TouchableOpacity
+            style={[styles.toggleBtn, {
+              backgroundColor: isAdded ? theme.danger + '22' : isExpanded ? theme.accent + '22' : theme.success + '22',
+            }]}
+            onPress={() => isAdded ? handleRemoveItem(item) : handlePlusTap(item)}
+          >
+            <Text style={[styles.toggleBtnText, {
+              color: isAdded ? theme.danger : isExpanded ? theme.accent : theme.success,
+            }]}>
+              {isAdded ? '−' : '+'}
+            </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.toggleBtn, { backgroundColor: isAdded ? theme.danger + '22' : theme.success + '22' }]}
-          onPress={() => isAdded ? handleRemoveItem(item) : handleAddItem(item)}
-        >
-          <Text style={[styles.toggleBtnText, { color: isAdded ? theme.danger : theme.success }]}>
-            {isAdded ? '−' : '+'}
-          </Text>
-        </TouchableOpacity>
+
+        {/* Inline brand bubble picker */}
+        {isExpanded && (
+          <View style={styles.brandPicker}>
+            {item.variants.map((v, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.brandBubble, { backgroundColor: theme.chip, borderColor: theme.border }]}
+                onPress={() => handleAddVariant(item, i)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.brandBubbleName, { color: theme.text }]}>{v.brand}</Text>
+                <Text style={[styles.brandBubblePrice, { color: theme.accent }]}>${v.defaultPrice.toFixed(2)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -92,8 +146,15 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
     <View style={c.screen}>
       <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
       <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
-        <TextInput style={[c.input, { flex: 1, marginRight: 10 }]} placeholder="Search…" placeholderTextColor={theme.placeholder} value={searchQuery} onChangeText={setSearchQuery} />
-        <TouchableOpacity style={[c.primaryButton, { paddingHorizontal: 14 }]} onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'SelectMasterItem', listId })}>
+        <TextInput
+          style={[c.input, { flex: 1, marginRight: 10 }]}
+          placeholder="Search…" placeholderTextColor={theme.placeholder}
+          value={searchQuery} onChangeText={setSearchQuery}
+        />
+        <TouchableOpacity
+          style={[c.primaryButton, { paddingHorizontal: 14 }]}
+          onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'SelectMasterItem', listId })}
+        >
           <Text style={c.primaryButtonText}>+ New</Text>
         </TouchableOpacity>
       </View>
@@ -120,4 +181,8 @@ const styles = StyleSheet.create({
   itemPrice: { fontSize: 13, fontWeight: '600' },
   toggleBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
   toggleBtnText: { fontSize: 24, fontWeight: '600', lineHeight: 28 },
+  brandPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 12, paddingLeft: 4 },
+  brandBubble: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, alignItems: 'center' },
+  brandBubbleName: { fontSize: 13, fontWeight: '600' },
+  brandBubblePrice: { fontSize: 12, fontWeight: '500', marginTop: 1 },
 });

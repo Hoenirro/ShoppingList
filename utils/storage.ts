@@ -542,7 +542,102 @@ static async addPriceToVariantHistory(
     }
   }
 
-  static async saveActiveSession(session: ActiveSession): Promise<void> {
+  // ─── Backfill the real session ID into the latest price history record ───────
+  static async updateLatestPriceHistorySessionId(
+    masterItemId: string,
+    variantIndex: number,
+    sessionId: string,
+    receiptImageUri?: string,
+  ): Promise<void> {
+    try {
+      const items = await this.getAllMasterItems();
+      const item = items.find(i => i.id === masterItemId);
+      if (!item) return;
+      const variant = item.variants[variantIndex];
+      if (!variant?.priceHistory?.length) return;
+      const latest = variant.priceHistory[variant.priceHistory.length - 1];
+      if (!latest.listId) {
+        latest.listId = sessionId;
+        if (receiptImageUri) latest.receiptImageUri = receiptImageUri;
+        item.updatedAt = Date.now();
+        await this.saveMasterItem(item);
+      }
+    } catch (error) {
+      console.error('Error updating price history session ID:', error);
+    }
+  }
+
+  // ─── Import: find or create master items from a .shoplist file ──────────────
+  // Rules (case-insensitive name matching):
+  //   - No name match  → create new master item with category from file
+  //   - Name matches, brand exists → reuse as-is (ignore imported category)
+  //   - Name matches, brand is new → add brand as new variant (ignore imported category)
+  static async findOrCreateMasterItemsFromImport(
+    importedItems: Array<{ name: string; brand: string; category?: string }>
+  ): Promise<Map<string, { masterItemId: string; variantIndex: number }>> {
+    const result = new Map<string, { masterItemId: string; variantIndex: number }>();
+    const allItems = await this.getAllMasterItems();
+    const now = Date.now();
+
+    for (const imported of importedItems) {
+      const key = `${imported.name.trim()}__${imported.brand.trim()}`;
+      if (result.has(key)) continue;
+
+      const normName = imported.name.trim().toLowerCase();
+      const normBrand = imported.brand.trim().toLowerCase();
+
+      const existing = allItems.find(i => i.name.trim().toLowerCase() === normName);
+
+      if (!existing) {
+        // Brand-new item — create with category
+        const newId = `${now}_${Math.random().toString(36).slice(2, 8)}`;
+        const newItem: MasterItem = {
+          id: newId,
+          name: imported.name.trim(),
+          category: imported.category,
+          variants: [{
+            brand: imported.brand.trim(),
+            defaultPrice: 0,
+            averagePrice: 0,
+            priceHistory: [],
+            createdAt: now,
+            updatedAt: now,
+          }],
+          defaultVariantIndex: 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await this.saveMasterItem(newItem);
+        allItems.push(newItem);
+        result.set(key, { masterItemId: newItem.id, variantIndex: 0 });
+      } else {
+        const variantIndex = existing.variants.findIndex(
+          v => v.brand.trim().toLowerCase() === normBrand
+        );
+        if (variantIndex !== -1) {
+          // Name + brand already exist — reuse
+          result.set(key, { masterItemId: existing.id, variantIndex });
+        } else {
+          // Name exists, new brand — add variant
+          existing.variants.push({
+            brand: imported.brand.trim(),
+            defaultPrice: 0,
+            averagePrice: 0,
+            priceHistory: [],
+            createdAt: now,
+            updatedAt: now,
+          });
+          existing.updatedAt = now;
+          await this.saveMasterItem(existing);
+          result.set(key, { masterItemId: existing.id, variantIndex: existing.variants.length - 1 });
+        }
+      }
+    }
+
+    return result;
+  }
+
+static async saveActiveSession(session: ActiveSession): Promise<void> {
   try {
     const file = new FileSystem.File(Paths.document, 'active_session.json');
     await file.write(JSON.stringify(session, null, 2));

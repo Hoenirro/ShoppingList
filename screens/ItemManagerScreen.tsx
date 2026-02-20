@@ -1,12 +1,12 @@
+// screens/ItemManagerScreen.tsx
 import React, { useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, TextInput, StatusBar,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, TextInput, StatusBar } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
 import { MasterItem } from '../types';
 import { useTheme } from '../theme/ThemeContext';
-import { makeCommonStyles, makeShadow } from '../theme/theme';
+import { makeCommonStyles } from '../theme/theme';
+import { getCategoryEmoji } from '../utils/categories';
 
 export default function ItemManagerScreen({ navigation }: any) {
   const { theme } = useTheme();
@@ -16,9 +16,7 @@ export default function ItemManagerScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { loadItems(); }, []));
 
-  const loadItems = async () => {
-    setItems(await ShoppingListStorage.getAllMasterItems());
-  };
+  const loadItems = async () => setItems(await ShoppingListStorage.getAllMasterItems());
 
   const handleDeleteItem = (item: MasterItem) => {
     Alert.alert('Delete Product', `Delete "${item.name}" and all its brands?`, [
@@ -39,6 +37,7 @@ export default function ItemManagerScreen({ navigation }: any) {
     const defaultVariant = item.variants[item.defaultVariantIndex || 0];
     const lowestPrice = Math.min(...item.variants.map(v => v.defaultPrice || 0));
     const avgPrice = item.variants.reduce((s, v) => s + (v.averagePrice || 0), 0) / item.variants.length;
+    const fallback = getCategoryEmoji(item.category);
 
     return (
       <View style={[c.card, styles.itemRow]}>
@@ -47,7 +46,7 @@ export default function ItemManagerScreen({ navigation }: any) {
             <Image source={{ uri: defaultVariant.imageUri }} style={c.thumbnail} />
           ) : (
             <View style={[c.thumbnail, c.placeholder]}>
-              <Text style={{ fontSize: 24 }}>📦</Text>
+              <Text style={{ fontSize: 24 }}>{fallback}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -55,7 +54,7 @@ export default function ItemManagerScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
           <Text style={[styles.itemSub, { color: theme.textMuted }]}>
-            {item.variants.length} brand{item.variants.length !== 1 ? 's' : ''}
+            {item.category ? `${item.category} · ` : ''}{item.variants.length} brand{item.variants.length !== 1 ? 's' : ''}
           </Text>
           <View style={styles.priceRow}>
             <Text style={[styles.priceTag, { color: theme.accent, backgroundColor: theme.chip }]}>
@@ -94,7 +93,6 @@ export default function ItemManagerScreen({ navigation }: any) {
   return (
     <View style={c.screen}>
       <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
-
       <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
         <TextInput
           style={[c.input, { flex: 1, marginRight: 10 }]}
@@ -110,7 +108,6 @@ export default function ItemManagerScreen({ navigation }: any) {
           <Text style={c.primaryButtonText}>+ New</Text>
         </TouchableOpacity>
       </View>
-
       <FlatList
         data={filteredItems}
         keyExtractor={item => item.id}

@@ -7,3 +7,13 @@
 - user login
 - shopping group
 - manage the same shopping list
+
+### gen APK ###
+# Complete clean
+cd android
+./gradlew clean
+cd ..
+rm -rf android
+npx expo prebuild --clean
+# Build fresh
+eas build -p android --profile preview

@@ -14,7 +14,6 @@ import ItemManagerScreen from './screens/ItemManagerScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import EditMasterItemScreen from './screens/EditMasterItemScreen';
-import EditListItemScreen from './screens/EditListItemScreen';
 import SelectMasterItemScreen from './screens/SelectMasterItemScreen';
 import PriceHistoryScreen from './screens/PriceHistoryScreen';
 import ThemeScreen from './screens/ThemeScreen';
@@ -55,7 +54,6 @@ function AppNavigator() {
         <Stack.Screen name="ShoppingList" component={ShoppingListScreen} options={{ title: 'Shopping List' }} />
         <Stack.Screen name="ActiveList" component={ActiveListScreen} options={{ title: 'Shopping' }} />
         <Stack.Screen name="EditMasterItem" component={EditMasterItemScreen} options={{ title: 'Product', presentation: 'modal' }} />
-        <Stack.Screen name="EditListItem" component={EditListItemScreen} options={{ title: 'Edit Item', presentation: 'modal' }} />
         <Stack.Screen name="SelectMasterItem" component={SelectMasterItemScreen} options={{ title: 'Add Items' }} />
         <Stack.Screen name="PriceHistory" component={PriceHistoryScreen} options={{ title: 'Price History' }} />
         <Stack.Screen name="Theme" component={ThemeScreen} options={{ title: '🎨 Themes' }} />

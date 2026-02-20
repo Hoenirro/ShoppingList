@@ -1,13 +1,13 @@
+// screens/ShoppingListScreen.tsx
 import React, { useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, StatusBar,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, StatusBar } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
 import { ShareListService } from '../utils/shareList';
 import { ShoppingList, ShoppingListItem } from '../types';
 import { useTheme } from '../theme/ThemeContext';
 import { makeCommonStyles, makeShadow } from '../theme/theme';
+import { getCategoryEmoji } from '../utils/categories';
 
 export default function ShoppingListScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -24,11 +24,8 @@ export default function ShoppingListScreen({ route, navigation }: any) {
 
   const handleShareList = async () => {
     if (!list) return;
-    try {
-      await ShareListService.exportList(list);
-    } catch (error: any) {
-      Alert.alert('Share Failed', error.message || 'Could not share this list.');
-    }
+    try { await ShareListService.exportList(list); }
+    catch (error: any) { Alert.alert('Share Failed', error.message || 'Could not share this list.'); }
   };
 
   const handleRemoveItem = (item: ShoppingListItem) => {
@@ -38,8 +35,11 @@ export default function ShoppingListScreen({ route, navigation }: any) {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          const updatedItems = list.items.filter(i => i.masterItemId !== item.masterItemId);
-          const updatedList = { ...list, items: updatedItems, updatedAt: Date.now() };
+          const updatedList = {
+            ...list,
+            items: list.items.filter(i => i.masterItemId !== item.masterItemId),
+            updatedAt: Date.now(),
+          };
           await ShoppingListStorage.saveList(updatedList);
           setList(updatedList);
         },
@@ -47,34 +47,34 @@ export default function ShoppingListScreen({ route, navigation }: any) {
     ]);
   };
 
-  const renderItem = ({ item }: { item: ShoppingListItem }) => (
-    <View style={[c.card, styles.itemRow]}>
-      {item.imageUri ? (
-        <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
-      ) : (
-        <View style={[c.thumbnail, c.placeholder]}>
-          <Text style={{ fontSize: 22 }}>📷</Text>
-        </View>
-      )}
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-        <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
-        <View style={styles.priceRow}>
-          <Text style={[styles.priceChip, { color: theme.accent, backgroundColor: theme.chip }]}>
-            Last ${item.lastPrice.toFixed(2)}
-          </Text>
-          <Text style={[styles.priceChip, { color: theme.textMuted, backgroundColor: theme.chip }]}>
-            Avg ${item.averagePrice.toFixed(2)}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.actions}>
+  const renderItem = ({ item }: { item: ShoppingListItem }) => {
+    const fallback = getCategoryEmoji(item.category);
+    return (
+      <View style={[c.card, styles.itemRow]}>
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: theme.chip }]}
-          onPress={() => navigation.navigate('EditListItem', { listId, listItemId: item.masterItemId })}
+          onPress={() => navigation.navigate('EditMasterItem', { listId, itemId: item.masterItemId, returnTo: 'ShoppingList' })}
+          activeOpacity={0.7}
         >
-          <Text style={{ color: theme.textMuted, fontSize: 15 }}>✎</Text>
+          {item.imageUri ? (
+            <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
+          ) : (
+            <View style={[c.thumbnail, c.placeholder]}>
+              <Text style={{ fontSize: 24 }}>{fallback}</Text>
+            </View>
+          )}
         </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+          <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceChip, { color: theme.accent, backgroundColor: theme.chip }]}>
+              Last ${item.lastPrice.toFixed(2)}
+            </Text>
+            <Text style={[styles.priceChip, { color: theme.textMuted, backgroundColor: theme.chip }]}>
+              Avg ${item.averagePrice.toFixed(2)}
+            </Text>
+          </View>
+        </View>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: theme.danger + '22' }]}
           onPress={() => handleRemoveItem(item)}
@@ -82,8 +82,8 @@ export default function ShoppingListScreen({ route, navigation }: any) {
           <Text style={{ color: theme.danger, fontSize: 18, fontWeight: '700' }}>−</Text>
         </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (!list) return <View style={c.screen} />;
 
@@ -91,28 +91,23 @@ export default function ShoppingListScreen({ route, navigation }: any) {
     <View style={c.screen}>
       <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
 
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>{list.name}</Text>
           <Text style={[styles.headerSub, { color: theme.textSubtle }]}>{list.items.length} items</Text>
         </View>
-
-        {/* Share button */}
         <TouchableOpacity
           style={[styles.headerBtn, { backgroundColor: theme.accent + '20' }]}
           onPress={handleShareList}
         >
           <Text style={[styles.headerBtnText, { color: theme.accent }]}>↑ Share</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.headerBtn, { backgroundColor: theme.chip }]}
           onPress={() => navigation.navigate('SelectMasterItem', { listId })}
         >
           <Text style={[styles.headerBtnText, { color: theme.accent }]}>+ Add</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.headerBtn, { backgroundColor: theme.accent, ...makeShadow(theme, 'sm') }]}
           onPress={() => navigation.navigate('ActiveList', { listId })}
@@ -152,6 +147,5 @@ const styles = StyleSheet.create({
   itemBrand: { fontSize: 13, marginBottom: 6 },
   priceRow: { flexDirection: 'row', gap: 6 },
   priceChip: { fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  actions: { flexDirection: 'column', gap: 6, marginLeft: 8 },
   actionBtn: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 });

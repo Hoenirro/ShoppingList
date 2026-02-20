@@ -11,6 +11,7 @@ export interface MasterItem {
   name: string;
   variants: BrandVariant[];
   defaultVariantIndex: number;
+  category?: string;  // e.g. "🥛 Dairy" — optional
   createdAt: number;
   updatedAt: number;
 }
@@ -27,13 +28,14 @@ export interface BrandVariant {
 
 export interface ShoppingListItem {
   masterItemId: string;
-  variantIndex: number; // Which brand variant this is
-  name: string; // Snapshot of product name
-  brand: string; // Snapshot of brand name
+  variantIndex: number;
+  name: string;
+  brand: string;
   lastPrice: number;
   averagePrice: number;
   priceAtAdd: number;
-  imageUri?: string; // Snapshot of brand image
+  imageUri?: string;
+  category?: string;  // snapshot from master item
   addedAt: number;
 }
 
@@ -77,9 +79,10 @@ export interface ActiveSession {
     checked: boolean;
     price?: number;
     imageUri?: string;
+    category?: string;
   }[];
   checkedItems: {
-    [key: string]: { // key = `${masterItemId}_${variantIndex}`
+    [key: string]: {
       checked: boolean;
       price?: number;
       checkedAt: number;
@@ -95,8 +98,7 @@ export type RootStackParamList = {
   ShoppingList: { listId: string };
   ActiveList: { listId: string };
   SelectMasterItem: { listId: string; onGoBack?: () => void };
-  EditMasterItem: { itemId?: string; returnTo?: string; listId?: string };
-  EditListItem: { listId: string; listItemId?: string; masterItemId?: string };
+  EditMasterItem: { itemId?: string; returnTo?: string; listId?: string; mode?: 'addToList' };
   PriceHistory: { masterItemId: string; itemName: string };
   History: undefined;
   SessionDetails: { sessionId: string };
