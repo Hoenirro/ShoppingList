@@ -31,12 +31,12 @@
             "UTTypeIdentifier": "com.shoppinglist.shoplist",
             "UTTypeDescription": "Shopping List",
             "UTTypeConformsTo": [
-              "public.data"
+              "public.data",
+              "public.content"
             ],
             "UTTypeTagSpecification": {
-              "public.filename-extension": [
-                "shoplist"
-              ]
+              "public.filename-extension": ["shoplist"],
+              "public.mime-type": "application/octet-stream"
             }
           }
         ]
@@ -49,36 +49,55 @@
       },
       "package": "com.yourname.shoppinglist",
       "intentFilters": [
-  {
-    "action": "android.intent.action.VIEW",
-    "autoVerify": false,
-    "data": [
-      { "scheme": "content", "mimeType": "*/*" },
-      { "scheme": "file", "mimeType": "*/*" }
-    ],
-    "category": [
-      "android.intent.category.DEFAULT",
-      "android.intent.category.BROWSABLE"
-    ]
-  },
-  {
-    "action": "android.intent.action.VIEW",
-    "autoVerify": false,
-    "data": [
-      { "scheme": "content", "mimeType": "application/octet-stream" },
-      { "scheme": "file", "mimeType": "application/octet-stream" }
-    ],
-    "category": [
-      "android.intent.category.DEFAULT",
-      "android.intent.category.BROWSABLE"
-    ]
-  }
-],
+        {
+          "action": "android.intent.action.VIEW",
+          "autoVerify": false,
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "file",
+              "mimeType": "*/*",
+              "pathPattern": ".*\\.shoplist"
+            }
+          ]
+        },
+        {
+          "action": "android.intent.action.VIEW",
+          "autoVerify": false,
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "application/octet-stream"
+            }
+          ]
+        },
+        {
+          "action": "android.intent.action.VIEW",
+          "autoVerify": false,
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "*/*",
+              "pathPattern": ".*\\.shoplist"
+            }
+          ]
+        }
+      ],
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.INTERNET",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.INTERNET"
       ]
     },
     "web": {
