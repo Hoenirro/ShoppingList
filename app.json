@@ -49,25 +49,31 @@
       },
       "package": "com.yourname.shoppinglist",
       "intentFilters": [
-        {
-          "action": "android.intent.action.VIEW",
-          "autoVerify": false,
-          "data": [
-            {
-              "scheme": "content",
-              "mimeType": "application/vnd.shoppinglist"
-            },
-            {
-              "scheme": "file",
-              "mimeType": "application/vnd.shoppinglist"
-            }
-          ],
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ]
-        }
-      ],
+  {
+    "action": "android.intent.action.VIEW",
+    "autoVerify": false,
+    "data": [
+      { "scheme": "content", "mimeType": "*/*" },
+      { "scheme": "file", "mimeType": "*/*" }
+    ],
+    "category": [
+      "android.intent.category.DEFAULT",
+      "android.intent.category.BROWSABLE"
+    ]
+  },
+  {
+    "action": "android.intent.action.VIEW",
+    "autoVerify": false,
+    "data": [
+      { "scheme": "content", "mimeType": "application/octet-stream" },
+      { "scheme": "file", "mimeType": "application/octet-stream" }
+    ],
+    "category": [
+      "android.intent.category.DEFAULT",
+      "android.intent.category.BROWSABLE"
+    ]
+  }
+],
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
