@@ -130,13 +130,13 @@ export default function App() {
 
   // ── 3. Drain the queue once both app AND navigator are mounted ─────────────
   useEffect(() => {
-    if (isReady && navigatorReady && pendingUri.current) {
-      const uri = pendingUri.current;
-      pendingUri.current = null;
-      // Brief delay so Welcome screen mounts before the Alert fires
-      setTimeout(() => handleFileUri(uri), 600);
-    }
-  }, [isReady, navigatorReady]);
+    if (!navigatorReady) return;
+    const uri = pendingUri.current;
+    if (!uri) return;
+    pendingUri.current = null;
+    // Delay so Welcome screen fully renders before the Alert fires
+    setTimeout(() => handleFileUri(uri), 800);
+  }, [navigatorReady]); 
 
   // ── Loading splash ─────────────────────────────────────────────────────────
   if (!isReady) {
