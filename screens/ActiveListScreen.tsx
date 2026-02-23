@@ -30,6 +30,8 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const [actualPaid, setActualPaid] = useState('');
   const [editingActual, setEditingActual] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [masterItems, setMasterItems] = useState<any[]>([]);
+  const [expandedBrandId, setExpandedBrandId] = useState<string | null>(null);
 
   const getItemKey = (item: { masterItemId: string; variantIndex: number }) =>
     `${item.masterItemId}_${item.variantIndex}`;
@@ -62,23 +64,50 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const loadActiveSession = async () => {
     setIsLoading(true);
     try {
-      const activeSession = await ShoppingListStorage.getActiveSession();
-      const lists = await ShoppingListStorage.getAllLists();
+      const [activeSession, lists, masterItems] = await Promise.all([
+        ShoppingListStorage.getActiveSession(listId),
+        ShoppingListStorage.getAllLists(),
+        ShoppingListStorage.getAllMasterItems(),
+      ]);
+
       const currentList = lists.find(l => l.id === listId);
       if (!currentList) { Alert.alert('Error', 'List not found'); setIsLoading(false); return; }
-      setList(prev => JSON.stringify(prev) === JSON.stringify(currentList) ? prev : currentList);
-      if (activeSession && activeSession.listId === listId) {
+
+      // Re-hydrate each item's display fields from master item so edits
+      // made in EditMasterItem (brand, image, category) show up immediately
+      const masterMap = new Map(masterItems.map((m: any) => [m.id, m]));
+      const freshList = {
+        ...currentList,
+        items: currentList.items.map(item => {
+          const master = masterMap.get(item.masterItemId) as any;
+          const variant = master?.variants[item.variantIndex] ?? master?.variants[0];
+          if (!master || !variant) return item;
+          return {
+            ...item,
+            name: master.name,
+            brand: variant.brand,
+            imageUri: variant.imageUri ?? item.imageUri,
+            category: master.category ?? item.category,
+            lastPrice: variant.defaultPrice ?? item.lastPrice,
+            averagePrice: variant.averagePrice ?? item.averagePrice,
+          };
+        }),
+      };
+      setList(freshList);
+      setMasterItems(masterItems);
+
+      if (activeSession) {
         setCheckedItems(activeSession.checkedItems || {});
         const prices: { [key: string]: number } = {};
-        Object.entries(activeSession.checkedItems || {}).forEach(([k, v]) => { if (v.price) prices[k] = v.price; });
+        Object.entries(activeSession.checkedItems || {}).forEach(([k, v]: [string, any]) => { if (v.price) prices[k] = v.price; });
         setItemPrices(prices);
         setReceiptImage(activeSession.receiptImageUri || null);
       } else {
         setCheckedItems({}); setItemPrices({}); setReceiptImage(null);
         const newSession: ActiveSession = {
-          id: Date.now().toString(), listId: currentList.id, listName: currentList.name,
+          id: Date.now().toString(), listId: freshList.id, listName: freshList.name,
           startTime: Date.now(),
-          items: currentList.items.map(item => ({
+          items: freshList.items.map(item => ({
             masterItemId: item.masterItemId, variantIndex: item.variantIndex,
             name: item.name, brand: item.brand, lastPrice: item.lastPrice,
             checked: false, imageUri: item.imageUri, category: item.category,
@@ -137,6 +166,44 @@ export default function ActiveListScreen({ route, navigation }: any) {
     await saveActiveSessionState(newChecked, newPrices);
   };
 
+  // ── Tap brand name → open variant picker ────────────────────────────────────
+  const handleSwitchVariant = async (item: ShoppingListItem, newVariantIndex: number) => {
+    if (!list) return;
+    const master = masterItems.find((m: any) => m.id === item.masterItemId);
+    if (!master) return;
+    const newVariant = master.variants[newVariantIndex];
+    if (!newVariant) return;
+
+    const oldKey = getItemKey(item);
+    const newItem: ShoppingListItem = {
+      ...item,
+      variantIndex: newVariantIndex,
+      brand: newVariant.brand,
+      imageUri: newVariant.imageUri ?? item.imageUri,
+      lastPrice: newVariant.defaultPrice ?? item.lastPrice,
+      averagePrice: newVariant.averagePrice ?? item.averagePrice,
+    };
+    const newKey = getItemKey(newItem);
+
+    // Update the list
+    const updatedItems = list.items.map(i =>
+      i.masterItemId === item.masterItemId && i.variantIndex === item.variantIndex ? newItem : i
+    );
+    const updatedList = { ...list, items: updatedItems, updatedAt: Date.now() };
+    await ShoppingListStorage.saveList(updatedList);
+    setList(updatedList);
+
+    // Migrate checked/price state to new key
+    const newChecked = { ...checkedItems };
+    const newPrices = { ...itemPrices };
+    if (newChecked[oldKey]) { newChecked[newKey] = newChecked[oldKey]; delete newChecked[oldKey]; }
+    if (newPrices[oldKey] !== undefined) { newPrices[newKey] = newPrices[oldKey]; delete newPrices[oldKey]; }
+    setCheckedItems(newChecked);
+    setItemPrices(newPrices);
+    await saveActiveSessionState(newChecked, newPrices);
+    setExpandedBrandId(null);
+  };
+
   // ── Tap the check circle → toggle checked state ──────────────────────────
   const handleToggleCheck = async (item: ShoppingListItem) => {
     const key = getItemKey(item);
@@ -184,8 +251,10 @@ export default function ActiveListScreen({ route, navigation }: any) {
     const uri = await ShoppingListStorage.pickImage();
     if (uri) {
       const saved = await ShoppingListStorage.saveImage(uri, 'receipt');
+      if (saved) {
       setReceiptImage(saved);
       await saveActiveSessionState(undefined, undefined, saved);
+      }
     }
   };
 
@@ -217,7 +286,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
       }
     }
 
-    await ShoppingListStorage.clearActiveSession();
+    await ShoppingListStorage.clearActiveSession(list.id);
     navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
   };
 
@@ -236,6 +305,8 @@ export default function ActiveListScreen({ route, navigation }: any) {
     const price = itemPrices[key] ?? item.lastPrice;
     const isEditing = editingKey === key;
     const fallback = getCategoryEmoji(item.category);
+    const master = masterItems.find((m: any) => m.id === item.masterItemId);
+    const isExpanded = expandedBrandId === key;
 
     // Section divider between unchecked and checked
     const showDivider = index === unchecked.length && checked.length > 0 && unchecked.length > 0;
@@ -252,79 +323,129 @@ export default function ActiveListScreen({ route, navigation }: any) {
           </View>
         )}
         <View style={[
-          c.card, styles.itemRow,
+          c.card,
           isChecked && { opacity: 0.55, backgroundColor: theme.chip },
         ]}>
-          {/* Thumbnail / category fallback */}
-          {item.imageUri ? (
-            <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
-          ) : (
-            <View style={[c.thumbnail, c.placeholder]}>
-              <Text style={{ fontSize: 24 }}>{fallback}</Text>
-            </View>
-          )}
-
-          <View style={{ flex: 1 }}>
-            <Text style={[
-              styles.itemName,
-              { color: isChecked ? theme.textSubtle : theme.text },
-              isChecked && styles.strikethrough,
-            ]}>
-              {item.name}
-            </Text>
-            <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
-
-            {/* Inline price — tap to edit */}
+          {/* Main row */}
+          <View style={styles.itemRow}>
+            {/* Thumbnail — tap to edit product */}
             <TouchableOpacity
-              onPress={() => handlePriceTap(item)}
-              activeOpacity={isChecked ? 1 : 0.6}
+              onPress={() => !isChecked && navigation.navigate('EditMasterItem', {
+                itemId: item.masterItemId,
+                returnTo: 'ActiveList',
+                listId,
+              })}
+              activeOpacity={isChecked ? 1 : 0.7}
               disabled={isChecked}
             >
-              {isEditing ? (
-                <TextInput
-                  style={[styles.priceInput, {
-                    color: theme.accent,
-                    borderColor: theme.accent,
-                    backgroundColor: theme.inputBg,
-                  }]}
-                  value={editingValue}
-                  onChangeText={setEditingValue}
-                  keyboardType="decimal-pad"
-                  autoFocus
-                  selectTextOnFocus
-                  onBlur={() => handlePriceCommit(item)}
-                  onSubmitEditing={() => handlePriceCommit(item)}
-                />
+              {item.imageUri ? (
+                <Image source={{ uri: item.imageUri }} style={[c.thumbnail, isChecked && { opacity: 0.5 }]} />
               ) : (
-                <View style={[styles.priceChip, { backgroundColor: theme.chip }]}>
-                  <Text style={[styles.priceChipText, { color: isChecked ? theme.textSubtle : theme.accent }]}>
-                    ${(price || 0).toFixed(2)}
-                  </Text>
-                  {!isChecked && (
-                    <Text style={[styles.priceEditHint, { color: theme.textSubtle }]}> ✎</Text>
-                  )}
+                <View style={[c.thumbnail, c.placeholder]}>
+                  <Text style={{ fontSize: 24 }}>{fallback}</Text>
                 </View>
+              )}
+              {!isChecked && (
+                <View style={[styles.editBadge, { backgroundColor: theme.accent }]}>
+                  <Text style={styles.editBadgeText}>✎</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={{ flex: 1 }}>
+              <Text style={[
+                styles.itemName,
+                { color: isChecked ? theme.textSubtle : theme.text },
+                isChecked && styles.strikethrough,
+              ]}>
+                {item.name}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (isChecked || !master || master.variants.length <= 1) return;
+                  setExpandedBrandId(prev => prev === key ? null : key);
+                }}
+                disabled={isChecked}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.itemBrand, { color: isChecked ? theme.textMuted : theme.accent }]}>
+                  {item.brand}{!isChecked && (master?.variants?.length ?? 0) > 1 ? ' ↕' : ''}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Inline price — tap to edit */}
+              <TouchableOpacity
+                onPress={() => handlePriceTap(item)}
+                activeOpacity={isChecked ? 1 : 0.6}
+                disabled={isChecked}
+              >
+                {isEditing ? (
+                  <TextInput
+                    style={[styles.priceInput, {
+                      color: theme.accent,
+                      borderColor: theme.accent,
+                      backgroundColor: theme.inputBg,
+                    }]}
+                    value={editingValue}
+                    onChangeText={setEditingValue}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    selectTextOnFocus
+                    onBlur={() => handlePriceCommit(item)}
+                    onSubmitEditing={() => handlePriceCommit(item)}
+                  />
+                ) : (
+                  <View style={[styles.priceChip, { backgroundColor: theme.chip }]}>
+                    <Text style={[styles.priceChipText, { color: isChecked ? theme.textSubtle : theme.accent }]}>
+                      ${(price || 0).toFixed(2)}
+                    </Text>
+                    {!isChecked && (
+                      <Text style={[styles.priceEditHint, { color: theme.textSubtle }]}> ✎</Text>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Check button */}
+            <TouchableOpacity
+              style={[
+                styles.checkBtn,
+                {
+                  backgroundColor: isChecked ? theme.success : 'transparent',
+                  borderColor: isChecked ? theme.success : theme.border,
+                  borderWidth: 2,
+                },
+              ]}
+              onPress={() => handleToggleCheck(item)}
+              activeOpacity={0.7}
+            >
+              {isChecked && (
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>✓</Text>
               )}
             </TouchableOpacity>
           </View>
 
-          {/* Check button */}
-          <TouchableOpacity
-            style={[
-              styles.checkBtn,
-              {
-                backgroundColor: isChecked ? theme.success : 'transparent',
-                borderColor: isChecked ? theme.success : theme.border,
-                borderWidth: 2,
-              },
-            ]}
-            onPress={() => handleToggleCheck(item)}
-            activeOpacity={0.7}
-          >
-            {isChecked && (
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>✓</Text>
-            )}
-          </TouchableOpacity>
+          {/* Brand bubbles — below the row when expanded */}
+          {isExpanded && master && (
+            <View style={styles.brandBubbles}>
+              {master.variants.map((v: any, i: number) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.brandBubble, {
+                    backgroundColor: i === item.variantIndex ? theme.chipSelected : theme.chip,
+                    borderColor: i === item.variantIndex ? theme.accent : theme.border,
+                  }]}
+                  onPress={() => handleSwitchVariant(item, i)}
+                >
+                  <Text style={[styles.brandBubbleName, { color: theme.text }]}>{v.brand}</Text>
+                  {v.defaultPrice > 0 && (
+                    <Text style={[styles.brandBubblePrice, { color: theme.accent }]}>${v.defaultPrice.toFixed(2)}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </>
     );
@@ -497,6 +618,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', paddingHorizontal: 6,
   },
   itemRow: { flexDirection: 'row', alignItems: 'center' },
+  brandBubbles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
+  brandBubble: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
+  brandBubbleName: { fontSize: 13, fontWeight: '600' },
+  brandBubblePrice: { fontSize: 11, marginTop: 1 },
+  editBadge: {
+    position: 'absolute', bottom: -2, right: 8,
+    width: 16, height: 16, borderRadius: 8,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  editBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   itemName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   strikethrough: { textDecorationLine: 'line-through' },
   itemBrand: { fontSize: 12, marginBottom: 6 },

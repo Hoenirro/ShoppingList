@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-  Alert, StatusBar, Animated, Dimensions, TextInput, KeyboardAvoidingView, Platform,
+  Alert, StatusBar, Animated, Dimensions, TextInput, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ShoppingListStorage } from '../utils/storage';
@@ -21,6 +21,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
   const c = makeCommonStyles(theme);
 
   const [list, setList] = useState<ShoppingList | null>(null);
+  const [expandedItemBrandId, setExpandedItemBrandId] = useState<string | null>(null);
 
   // ── Panel state ──────────────────────────────────────────────────────────
   const [panelOpen, setPanelOpen] = useState(false);
@@ -41,6 +42,28 @@ export default function ShoppingListScreen({ route, navigation }: any) {
     const found = lists.find(l => l.id === listId) || null;
     setList(found);
     if (found) setAddedItemIds(new Set(found.items.map(i => i.masterItemId)));
+  };
+
+  const handleSwitchVariant = async (item: ShoppingListItem, newVariantIndex: number) => {
+    if (!list) return;
+    const master = masterItems.find(m => m.id === item.masterItemId);
+    if (!master) return;
+    const newVariant = master.variants[newVariantIndex];
+    if (!newVariant) return;
+    const updatedItems = list.items.map(i =>
+      i.masterItemId === item.masterItemId ? {
+        ...i,
+        variantIndex: newVariantIndex,
+        brand: newVariant.brand,
+        imageUri: newVariant.imageUri ?? i.imageUri,
+        lastPrice: newVariant.defaultPrice ?? i.lastPrice,
+        averagePrice: newVariant.averagePrice ?? i.averagePrice,
+      } : i
+    );
+    const updatedList = { ...list, items: updatedItems, updatedAt: Date.now() };
+    await ShoppingListStorage.saveList(updatedList);
+    setList(updatedList);
+    setExpandedItemBrandId(null);
   };
 
   const loadMasterItems = async () => {
@@ -134,38 +157,72 @@ export default function ShoppingListScreen({ route, navigation }: any) {
   // ── Render: current list item ────────────────────────────────────────────
   const renderListItem = ({ item }: { item: ShoppingListItem }) => {
     const fallback = getCategoryEmoji(item.category);
+    const master = masterItems.find(m => m.id === item.masterItemId);
+    const isExpanded = expandedItemBrandId === item.masterItemId;
+    const hasMultipleBrands = (master?.variants?.length ?? 0) > 1;
     return (
-      <View style={[c.card, styles.itemRow]}>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('EditMasterItem', { listId, itemId: item.masterItemId, returnTo: 'ShoppingList' })}
-          activeOpacity={0.7}
-        >
-          {item.imageUri ? (
-            <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
-          ) : (
-            <View style={[c.thumbnail, c.placeholder]}>
-              <Text style={{ fontSize: 24 }}>{fallback}</Text>
+      <View style={c.card}>
+        <View style={styles.itemRow}>
+          <TouchableOpacity
+            onPress={() => hasMultipleBrands
+              ? setExpandedItemBrandId(prev => prev === item.masterItemId ? null : item.masterItemId)
+              : navigation.navigate('EditMasterItem', { listId, itemId: item.masterItemId, returnTo: 'ShoppingList' })
+            }
+            activeOpacity={0.7}
+          >
+            {item.imageUri ? (
+              <Image source={{ uri: item.imageUri }} style={c.thumbnail} />
+            ) : (
+              <View style={[c.thumbnail, c.placeholder]}>
+                <Text style={{ fontSize: 24 }}>{fallback}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+            <TouchableOpacity
+              onPress={() => hasMultipleBrands && setExpandedItemBrandId(prev => prev === item.masterItemId ? null : item.masterItemId)}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.itemBrand, { color: hasMultipleBrands ? theme.accent : theme.textMuted }]}>
+                {item.brand}{hasMultipleBrands ? ' ↕' : ''}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceChip, { color: theme.accent, backgroundColor: theme.chip }]}>
+                Last ${item.lastPrice.toFixed(2)}
+              </Text>
+              <Text style={[styles.priceChip, { color: theme.textMuted, backgroundColor: theme.chip }]}>
+                Avg ${item.averagePrice.toFixed(2)}
+              </Text>
             </View>
-          )}
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-          <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
-          <View style={styles.priceRow}>
-            <Text style={[styles.priceChip, { color: theme.accent, backgroundColor: theme.chip }]}>
-              Last ${item.lastPrice.toFixed(2)}
-            </Text>
-            <Text style={[styles.priceChip, { color: theme.textMuted, backgroundColor: theme.chip }]}>
-              Avg ${item.averagePrice.toFixed(2)}
-            </Text>
           </View>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: theme.danger + '22' }]}
+            onPress={() => handleRemoveItem(item)}
+          >
+            <Text style={{ color: theme.danger, fontSize: 18, fontWeight: '700' }}>−</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: theme.danger + '22' }]}
-          onPress={() => handleRemoveItem(item)}
-        >
-          <Text style={{ color: theme.danger, fontSize: 18, fontWeight: '700' }}>−</Text>
-        </TouchableOpacity>
+        {isExpanded && master && (
+          <View style={styles.brandBubbles}>
+            {master.variants.map((v: any, i: number) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.brandBubble, {
+                  backgroundColor: i === item.variantIndex ? theme.chipSelected : theme.chip,
+                  borderColor: i === item.variantIndex ? theme.accent : theme.border,
+                }]}
+                onPress={() => handleSwitchVariant(item, i)}
+              >
+                <Text style={[styles.brandBubbleName, { color: theme.text }]}>{v.brand}</Text>
+                {v.defaultPrice > 0 && (
+                  <Text style={[styles.brandBubblePrice, { color: theme.accent }]}>${v.defaultPrice.toFixed(2)}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -417,6 +474,7 @@ const styles = StyleSheet.create({
   brandBubble: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, alignItems: 'center' },
   brandBubbleName: { fontSize: 13, fontWeight: '600' },
   brandBubblePrice: { fontSize: 12, fontWeight: '500', marginTop: 1 },
+  brandBubbles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
 
   // FAB
   fab: { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center', zIndex: 30 },

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, TextInput, Modal, StatusBar,
@@ -17,51 +17,91 @@ export default function WelcomeScreen({ navigation }: any) {
   const [lists, setLists] = useState<ShoppingList[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newListName, setNewListName] = useState('');
-  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Inline rename state: which list is being renamed + current edit value
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<TextInput>(null);
 
   useFocusEffect(
     useCallback(() => {
-      loadLists();
-      checkActiveSession();
+      loadData();
     }, [])
   );
 
-  const checkActiveSession = async () => {
-    setActiveSession(await ShoppingListStorage.getActiveSession());
-  };
-
-  const loadLists = async () => {
-    setLists(await ShoppingListStorage.getAllLists());
+  const loadData = async () => {
+    const [allLists, allSessions] = await Promise.all([
+      ShoppingListStorage.getAllLists(),
+      ShoppingListStorage.getAllActiveSessions(),
+    ]);
+    setLists(allLists);
+    setActiveSessions(allSessions);
   };
 
   const createNewList = async () => {
     if (!newListName.trim()) { Alert.alert('Error', 'Please enter a list name'); return; }
     await ShoppingListStorage.saveList({
       id: Date.now().toString(),
-      name: newListName,
+      name: newListName.trim(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       items: [],
     });
     setNewListName('');
     setModalVisible(false);
-    loadLists();
+    loadData();
   };
 
-  const deleteList = (listId: string, listName: string) => {
+  // ── Inline rename ──────────────────────────────────────────────────────────
+  const startRename = (list: ShoppingList) => {
+    setRenamingId(list.id);
+    setRenameValue(list.name);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const commitRename = async (listId: string) => {
+    if (renameValue.trim()) {
+      await ShoppingListStorage.renameList(listId, renameValue.trim());
+    }
+    setRenamingId(null);
+    loadData();
+  };
+
+  // ── Delete with active session guard ──────────────────────────────────────
+  const deleteList = async (listId: string, listName: string) => {
+    const isActive = await ShoppingListStorage.isListActivelyBeingShopped(listId);
+    if (isActive) {
+      Alert.alert(
+        'List In Use',
+        `"${listName}" has an active shopping trip. Cancel the trip before deleting?`,
+        [
+          { text: 'Keep', style: 'cancel' },
+          {
+            text: 'Cancel Trip & Delete', style: 'destructive',
+            onPress: async () => {
+              await ShoppingListStorage.clearActiveSession(listId);
+              await ShoppingListStorage.deleteList(listId);
+              loadData();
+            },
+          },
+        ]
+      );
+      return;
+    }
     Alert.alert('Delete List', `Delete "${listName}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await ShoppingListStorage.deleteList(listId); loadLists(); } },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => { await ShoppingListStorage.deleteList(listId); loadData(); },
+      },
     ]);
   };
 
   const handleShareList = async (list: ShoppingList) => {
-    try {
-      await ShareListService.exportList(list);
-    } catch (error: any) {
-      Alert.alert('Share Failed', error.message || 'Could not share this list.');
-    }
+    try { await ShareListService.exportList(list); }
+    catch (error: any) { Alert.alert('Share Failed', error.message || 'Could not share this list.'); }
   };
 
   const handleImportList = async () => {
@@ -73,7 +113,7 @@ export default function WelcomeScreen({ navigation }: any) {
         Alert.alert(
           '✅ List Imported!',
           `"${result.name}" was imported with ${result.itemCount} item${result.itemCount !== 1 ? 's' : ''}.\n\nPrices are not included — you'll fill those in as you shop.`,
-          [{ text: 'Got it', onPress: loadLists }]
+          [{ text: 'Got it', onPress: loadData }]
         );
       }
     } catch (error: any) {
@@ -83,41 +123,105 @@ export default function WelcomeScreen({ navigation }: any) {
     }
   };
 
-  const renderList = ({ item }: { item: ShoppingList }) => (
-    <TouchableOpacity
-      style={[c.card, styles.listItem]}
-      onPress={() => navigation.navigate('ShoppingList', { listId: item.id })}
-      activeOpacity={0.75}
-    >
-      <View style={[styles.listIconBox, { backgroundColor: theme.chip }]}>
-        <Text style={{ fontSize: 22 }}>📋</Text>
-      </View>
-      <View style={styles.listInfo}>
-        <Text style={[styles.listName, { color: theme.text }]}>{item.name}</Text>
-        <Text style={[styles.listMeta, { color: theme.textSubtle }]}>
-          {item.items.length} items · {new Date(item.updatedAt).toLocaleDateString()}
-        </Text>
-      </View>
-
-      {/* Share button */}
+  const renderActiveSession = (session: ActiveSession) => (
+    <View key={session.listId} style={styles.activeSessionWrapper}>
       <TouchableOpacity
-        style={[styles.actionBtn, { backgroundColor: theme.accent + '20' }]}
-        onPress={() => handleShareList(item)}
-        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={[styles.activeSessionCard, { backgroundColor: theme.success, ...makeShadow(theme, 'md') }]}
+        onPress={() => navigation.navigate('ActiveList', { listId: session.listId })}
+        activeOpacity={0.85}
       >
-        <Text style={[styles.actionBtnText, { color: theme.accent }]}>↑</Text>
+        <View>
+          <Text style={styles.activeSessionLabel}>🛒 ACTIVE SHOPPING</Text>
+          <Text style={styles.activeSessionName}>{session.listName}</Text>
+        </View>
+        <View>
+          <Text style={styles.activeSessionStats}>
+            {Object.keys(session.checkedItems).length} / {session.items.length}
+          </Text>
+          <Text style={styles.activeSessionResume}>Tap to resume →</Text>
+        </View>
       </TouchableOpacity>
-
-      {/* Delete button */}
       <TouchableOpacity
-        style={[styles.actionBtn, { backgroundColor: theme.danger + '20', marginLeft: 6 }]}
-        onPress={() => deleteList(item.id, item.name)}
-        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={[styles.clearActiveBtn, { backgroundColor: theme.danger + '22', borderColor: theme.danger + '44' }]}
+        onPress={() => {
+          Alert.alert('Cancel Shopping', `Cancel trip for "${session.listName}"? Progress will be lost.`, [
+            { text: 'Keep', style: 'cancel' },
+            {
+              text: 'Cancel Trip', style: 'destructive',
+              onPress: async () => { await ShoppingListStorage.clearActiveSession(session.listId); loadData(); },
+            },
+          ]);
+        }}
       >
-        <Text style={[styles.actionBtnText, { color: theme.danger }]}>✕</Text>
+        <Text style={[styles.clearActiveBtnText, { color: theme.danger }]}>✕ Cancel trip</Text>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
+
+  const renderList = ({ item }: { item: ShoppingList }) => {
+    const isRenaming = renamingId === item.id;
+    const isActive = activeSessions.some(s => s.listId === item.id);
+
+    return (
+      <TouchableOpacity
+        style={[c.card, styles.listItem]}
+        onPress={() => navigation.navigate('ShoppingList', { listId: item.id })}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.listIconBox, { backgroundColor: isActive ? theme.success + '33' : theme.chip }]}>
+          <Text style={{ fontSize: 22 }}>{isActive ? '🛒' : '📋'}</Text>
+        </View>
+
+        <View style={styles.listInfo}>
+          {isRenaming ? (
+            <TextInput
+              ref={renameInputRef}
+              style={[styles.renameInput, { color: theme.text, borderColor: theme.accent, backgroundColor: theme.inputBg }]}
+              value={renameValue}
+              onChangeText={setRenameValue}
+              onBlur={() => commitRename(item.id)}
+              onSubmitEditing={() => commitRename(item.id)}
+              selectTextOnFocus
+              returnKeyType="done"
+            />
+          ) : (
+            <Text style={[styles.listName, { color: theme.text }]}>{item.name}</Text>
+          )}
+          <Text style={[styles.listMeta, { color: theme.textSubtle }]}>
+            {item.items.length} items · {new Date(item.updatedAt).toLocaleDateString()}
+            {isActive ? ' · 🟢 Shopping' : ''}
+          </Text>
+        </View>
+
+        {/* Rename button */}
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: theme.accent + '20' }]}
+          onPress={() => isRenaming ? commitRename(item.id) : startRename(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        >
+          <Text style={[styles.actionBtnText, { color: theme.accent }]}>{isRenaming ? '✓' : '✎'}</Text>
+        </TouchableOpacity>
+
+        {/* Share button */}
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: theme.accent + '20', marginLeft: 6 }]}
+          onPress={() => handleShareList(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        >
+          <Text style={[styles.actionBtnText, { color: theme.accent }]}>↑</Text>
+        </TouchableOpacity>
+
+        {/* Delete button */}
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: theme.danger + '20', marginLeft: 6 }]}
+          onPress={() => deleteList(item.id, item.name)}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        >
+          <Text style={[styles.actionBtnText, { color: theme.danger }]}>✕</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={c.screen}>
@@ -141,39 +245,13 @@ export default function WelcomeScreen({ navigation }: any) {
         renderItem={renderList}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <>
-            {activeSession && (
-              <View style={styles.activeSessionWrapper}>
-                <TouchableOpacity
-                  style={[styles.activeSessionCard, { backgroundColor: theme.success, ...makeShadow(theme, 'md') }]}
-                  onPress={() => navigation.navigate('ActiveList', { listId: activeSession.listId })}
-                  activeOpacity={0.85}
-                >
-                  <View>
-                    <Text style={styles.activeSessionLabel}>🛒 ACTIVE SHOPPING</Text>
-                    <Text style={styles.activeSessionName}>{activeSession.listName}</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.activeSessionStats}>{Object.keys(activeSession.checkedItems).length} / {activeSession.items.length}</Text>
-                    <Text style={styles.activeSessionResume}>Tap to resume →</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.clearActiveBtn, { backgroundColor: theme.danger + '22', borderColor: theme.danger + '44' }]}
-                  onPress={() => {
-                    Alert.alert('Cancel Shopping', `Cancel "${activeSession.listName}"? Progress will be lost.`, [
-                      { text: 'Keep', style: 'cancel' },
-                      { text: 'Cancel Trip', style: 'destructive', onPress: async () => { await ShoppingListStorage.clearActiveSession(); setActiveSession(null); } },
-                    ]);
-                  }}
-                >
-                  <Text style={[styles.clearActiveBtnText, { color: theme.danger }]}>✕ Cancel trip</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* Active sessions — one card per active trip */}
+            {activeSessions.map(renderActiveSession)}
 
-            {/* Section header with Import button */}
+            {/* Section header */}
             <View style={styles.sectionHeader}>
               <Text style={c.sectionTitle}>Your Lists</Text>
               <TouchableOpacity
@@ -217,6 +295,8 @@ export default function WelcomeScreen({ navigation }: any) {
               value={newListName}
               onChangeText={setNewListName}
               autoFocus
+              onSubmitEditing={createNewList}
+              returnKeyType="done"
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity style={[c.ghostButton, { flex: 1, marginRight: 8 }]} onPress={() => { setModalVisible(false); setNewListName(''); }}>
@@ -246,9 +326,13 @@ const styles = StyleSheet.create({
   listInfo: { flex: 1 },
   listName: { fontSize: 15, fontWeight: '600', marginBottom: 3 },
   listMeta: { fontSize: 12 },
+  renameInput: {
+    fontSize: 15, fontWeight: '600', borderBottomWidth: 1.5,
+    paddingVertical: 2, paddingHorizontal: 0, marginBottom: 3,
+  },
   actionBtn: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
   actionBtnText: { fontSize: 14, fontWeight: '700' },
-  activeSessionWrapper: { marginBottom: 20 },
+  activeSessionWrapper: { marginBottom: 12 },
   activeSessionCard: { borderRadius: 14, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   activeSessionLabel: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.8, opacity: 0.9, marginBottom: 4 },
   activeSessionName: { color: '#fff', fontSize: 18, fontWeight: '700' },

@@ -123,7 +123,15 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
           variants, defaultVariantIndex: 0, createdAt: now, updatedAt: now,
         });
       }
-      navigation.goBack();
+      // Use navigate() instead of goBack() so the target screen receives
+      // a focus event and can re-hydrate its data (goBack on a modal doesn't trigger focus)
+      if (returnTo === 'ActiveList' && listId) {
+        navigation.navigate(returnTo, { listId });
+      } else if (returnTo) {
+        navigation.navigate(returnTo, listId ? { listId } : undefined);
+      } else {
+        navigation.goBack();
+      }
     } catch (e) { Alert.alert('Error', 'Failed to save'); } finally { setIsSaving(false); }
   };
 
