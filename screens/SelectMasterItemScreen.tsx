@@ -87,7 +87,7 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
         <View style={styles.row}>
           {/* Thumbnail → Edit product */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'SelectMasterItem', listId })}
+            onPress={() => navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'ShoppingList', listId })}
             activeOpacity={0.7}
           >
             {defaultVariant?.imageUri ? (
@@ -153,7 +153,7 @@ export default function SelectMasterItemScreen({ route, navigation }: any) {
         />
         <TouchableOpacity
           style={[c.primaryButton, { paddingHorizontal: 14 }]}
-          onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'SelectMasterItem', listId })}
+          onPress={() => navigation.navigate('EditMasterItem', { returnTo: 'ShoppingList', listId })}
         >
           <Text style={c.primaryButtonText}>+ New</Text>
         </TouchableOpacity>

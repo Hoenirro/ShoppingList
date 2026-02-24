@@ -101,4 +101,5 @@ export type RootStackParamList = {
   PriceHistory: { masterItemId: string; itemName: string };
   History: undefined;
   SessionDetails: { sessionId: string };
+  SelectMasterItem: { listId: string };
 };

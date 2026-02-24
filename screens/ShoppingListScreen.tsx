@@ -242,7 +242,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
           <TouchableOpacity
             onPress={() => {
               closePanel();
-              navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'SelectMasterItem', listId });
+              navigation.navigate('EditMasterItem', { itemId: item.id, returnTo: 'ShoppingList', listId });
             }}
             activeOpacity={0.7}
           >
@@ -379,7 +379,7 @@ export default function ShoppingListScreen({ route, navigation }: any) {
             style={[c.primaryButton, { paddingHorizontal: 14 }]}
             onPress={() => {
               closePanel();
-              navigation.navigate('EditMasterItem', { returnTo: 'SelectMasterItem', listId });
+              navigation.navigate('EditMasterItem', { returnTo: 'ShoppingList', listId });
             }}
           >
             <Text style={c.primaryButtonText}>+ New</Text>
@@ -470,11 +470,11 @@ const styles = StyleSheet.create({
   toggleBtnText: { fontSize: 22, fontWeight: '600', lineHeight: 26 },
 
   // Brand bubbles
+  brandBubbles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
   brandPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 10, paddingLeft: 4 },
   brandBubble: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, alignItems: 'center' },
   brandBubbleName: { fontSize: 13, fontWeight: '600' },
   brandBubblePrice: { fontSize: 12, fontWeight: '500', marginTop: 1 },
-  brandBubbles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
 
   // FAB
   fab: { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center', zIndex: 30 },

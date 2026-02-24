@@ -113,26 +113,63 @@ export default function EditMasterItemScreen({ route, navigation }: any) {
     try {
       const now = Date.now();
       if (isEditing && originalItem) {
+        // ── Editing existing item ──────────────────────────────────────────
         await ShoppingListStorage.saveMasterItem({
           ...originalItem, name: productName.trim(), category,
           variants, defaultVariantIndex: Math.min(selectedVariantIndex, variants.length - 1), updatedAt: now,
         });
       } else {
-        await ShoppingListStorage.saveMasterItem({
-          id: Date.now().toString(), name: productName.trim(), category,
-          variants, defaultVariantIndex: 0, createdAt: now, updatedAt: now,
-        });
+        // ── Creating new item: check for existing same name (case-insensitive) ──
+        const allItems = await ShoppingListStorage.getAllMasterItems();
+        const nameLower = productName.trim().toLowerCase();
+        const existing = allItems.find(i => i.name.trim().toLowerCase() === nameLower);
+
+        if (existing) {
+          // Merge: only add brands that don't already exist
+          const newVariants = variants.filter(v =>
+            !existing.variants.some(ev => ev.brand.trim().toLowerCase() === v.brand.trim().toLowerCase())
+          );
+          if (newVariants.length === 0) {
+            Alert.alert(
+              'Already Exists',
+              `"${existing.name}" already has all those brands. Opening existing product.`,
+              [{ text: 'OK' }]
+            );
+            setIsSaving(false);
+            navigateBack();
+            return;
+          }
+          await ShoppingListStorage.saveMasterItem({
+            ...existing,
+            variants: [...existing.variants, ...newVariants],
+            category: category ?? existing.category,
+            updatedAt: now,
+          });
+          Alert.alert('Merged', `Added ${newVariants.length} new brand${newVariants.length > 1 ? 's' : ''} to "${existing.name}".`);
+        } else {
+          await ShoppingListStorage.saveMasterItem({
+            id: now.toString(), name: productName.trim(), category,
+            variants, defaultVariantIndex: 0, createdAt: now, updatedAt: now,
+          });
+        }
       }
-      // Use navigate() instead of goBack() so the target screen receives
-      // a focus event and can re-hydrate its data (goBack on a modal doesn't trigger focus)
-      if (returnTo === 'ActiveList' && listId) {
-        navigation.navigate(returnTo, { listId });
-      } else if (returnTo) {
-        navigation.navigate(returnTo, listId ? { listId } : undefined);
-      } else {
-        navigation.goBack();
-      }
+      navigateBack();
     } catch (e) { Alert.alert('Error', 'Failed to save'); } finally { setIsSaving(false); }
+  };
+
+  const navigateBack = () => {
+    if (!returnTo) { navigation.goBack(); return; }
+    // Use popTo if available (React Navigation 7) — pops the stack back to the
+    // target screen without pushing a new copy. Falls back to goBack() otherwise.
+    if (typeof navigation.popTo === 'function') {
+      if (listId && ['ActiveList', 'ShoppingList', 'SelectMasterItem'].includes(returnTo)) {
+        navigation.popTo(returnTo as any, { listId });
+      } else {
+        navigation.popTo(returnTo as any);
+      }
+    } else {
+      navigation.goBack();
+    }
   };
 
   const handleSelectBuiltIn = (label: string) => {

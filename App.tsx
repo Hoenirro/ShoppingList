@@ -1,11 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Linking, View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ShoppingListStorage } from './utils/storage';
-import { ShareListService } from './utils/shareList';
 import { ThemeProvider, useTheme } from './theme/ThemeContext';
 
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -17,38 +16,38 @@ import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import EditMasterItemScreen from './screens/EditMasterItemScreen';
 import PriceHistoryScreen from './screens/PriceHistoryScreen';
 import ThemeScreen from './screens/ThemeScreen';
+import SelectMasterItemScreen from './screens/SelectMasterItemScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// ─── Process an incoming file URI ────────────────────────────────────────────
-// Called both on cold launch and warm launch.
-// The URI may be a content:// (Android) or file:// (iOS/Android) URI.
-async function handleFileUri(uri: string, onSuccess?: () => void): Promise<void> {
-  if (!uri) return;
-
-  // Only care about .shoplist files — ignore everything else silently
-  const lower = decodeURIComponent(uri).toLowerCase();
-  if (!lower.includes('.shoplist')) return;
-
-  try {
-    const result = await ShareListService.importFromUri(uri);
-    if (result) {
-      Alert.alert(
-        '✅ List Imported!',
-        `"${result.name}" was imported with ${result.itemCount} item${result.itemCount !== 1 ? 's' : ''}.\n\nPrices are not included — you'll fill those in as you shop.`,
-        [{ text: 'Got it', onPress: onSuccess }],
+// ── Global error boundary — catches render crashes that would show a white screen ──
+interface EBState { hasError: boolean }
+class NavigationErrorBoundary extends React.Component<{ children: React.ReactNode }, EBState> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any) { console.warn('NavigationErrorBoundary caught:', error); }
+  render() {
+    if (this.state.hasError) {
+      // Reset error state after a tick so the navigator can remount cleanly
+      setTimeout(() => this.setState({ hasError: false }), 100);
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F7F4' }}>
+          <ActivityIndicator size="large" color="#2E9E60" />
+        </View>
       );
     }
-  } catch (error: any) {
-    Alert.alert('Import Failed', error.message || 'Could not import this list.');
+    return this.props.children;
   }
 }
 
-// ─── Navigator ───────────────────────────────────────────────────────────────
-function AppNavigator({ onNavigatorReady }: { onNavigatorReady: () => void }) {
+function AppNavigator() {
   const { theme } = useTheme();
 
+  // Make react-navigation background match the active theme
   const navTheme = {
     ...DefaultTheme,
     colors: {
@@ -68,45 +67,55 @@ function AppNavigator({ onNavigatorReady }: { onNavigatorReady: () => void }) {
     headerTitleStyle: { color: theme.headerText, fontWeight: '700' as const },
   };
 
+  const navRef = useRef<any>(null);
+
+  const handleStateChange = useCallback(() => {
+    if (!navRef.current) return;
+    const state = navRef.current.getRootState();
+    if (!state) return;
+
+    // Walk to the deepest active route
+    let route = state.routes?.[state.index ?? 0];
+    while (route?.state) {
+      const nested = route.state;
+      route = nested.routes?.[nested.index ?? 0];
+    }
+
+    // If no active route found, stack is broken — reset to Welcome
+    if (!route?.name) {
+      console.warn('Navigation safety net: blank state detected, resetting to Welcome');
+      navRef.current.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+    }
+  }, []);
+
   return (
-    <NavigationContainer theme={navTheme} onReady={onNavigatorReady}>
+    <NavigationContainer theme={navTheme} ref={navRef} onStateChange={handleStateChange}>
       <Stack.Navigator initialRouteName="Welcome" screenOptions={headerOptions}>
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'My Lists', headerLargeTitle: true }} />
-        <Stack.Screen name="ItemManager" component={ItemManagerScreen} options={{ title: 'Manage Products' }} />
-        <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'Shopping History' }} />
+        <Stack.Screen name="ItemManager" component={ItemManagerScreen} options={{ title: 'Manage Products' }} getId={() => 'ItemManager'} />
+        <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'Shopping History' }} getId={() => 'History'} />
         <Stack.Screen name="SessionDetails" component={SessionDetailsScreen} options={{ title: 'Trip Details' }} />
-        <Stack.Screen name="ShoppingList" component={ShoppingListScreen} options={{ title: 'Shopping List' }} />
-        <Stack.Screen name="ActiveList" component={ActiveListScreen} options={{ title: 'Shopping' }} />
-        <Stack.Screen name="EditMasterItem" component={EditMasterItemScreen} options={{ title: 'Product', presentation: 'modal' }} />
+        <Stack.Screen name="ShoppingList" component={ShoppingListScreen} options={{ title: 'Shopping List' }} getId={({ params }) => params?.listId ?? 'ShoppingList'} />
+        <Stack.Screen name="ActiveList" component={ActiveListScreen} options={{ title: 'Shopping' }} getId={({ params }) => params?.listId ?? 'ActiveList'} />
+        <Stack.Screen name="EditMasterItem" component={EditMasterItemScreen} options={{ title: 'Product' }} getId={({ params }) => `edit_${params?.itemId ?? 'new'}_${params?.returnTo ?? ''}`} />
         <Stack.Screen name="PriceHistory" component={PriceHistoryScreen} options={{ title: 'Price History' }} />
-        <Stack.Screen name="Theme" component={ThemeScreen} options={{ title: '🎨 Themes' }} />
+        <Stack.Screen name="Theme" component={ThemeScreen} options={{ title: '🎨 Themes' }} getId={() => 'Theme'} />
+        <Stack.Screen name="SelectMasterItem" component={SelectMasterItemScreen} options={{ title: 'Add Items' }} getId={({ params }) => params?.listId ?? 'SelectMasterItem'} />
       </Stack.Navigator>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
     </NavigationContainer>
   );
 }
 
-// ─── Root App ────────────────────────────────────────────────────────────────
 export default function App() {
   const [isReady, setIsReady] = useState(false);
-  const [navigatorReady, setNavigatorReady] = useState(false);
 
-  // Hold any URI that arrives before both app + navigator are ready
-  const pendingUri = useRef<string | null>(null);
-
-  // ── 1. Boot: initialise storage, then check for a cold-launch file URI ────
   useEffect(() => {
     async function prepare() {
       try {
         await ShoppingListStorage.initialize();
         await ShoppingListStorage.migrateExistingItems();
         ShoppingListStorage.cleanupOrphanedImages().catch(() => {});
-
-        // Cold launch: was the app opened BY tapping a file?
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) {
-          pendingUri.current = initialUrl;
-        }
       } catch (e) {
         console.error('Init error:', e);
       } finally {
@@ -116,29 +125,6 @@ export default function App() {
     prepare();
   }, []);
 
-  // ── 2. Warm launch: app already running, a new file was tapped ────────────
-  useEffect(() => {
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      if (isReady && navigatorReady) {
-        handleFileUri(url);
-      } else {
-        pendingUri.current = url;
-      }
-    });
-    return () => sub.remove();
-  }, [isReady, navigatorReady]);
-
-  // ── 3. Drain the queue once both app AND navigator are mounted ─────────────
-  useEffect(() => {
-    if (!navigatorReady) return;
-    const uri = pendingUri.current;
-    if (!uri) return;
-    pendingUri.current = null;
-    // Delay so Welcome screen fully renders before the Alert fires
-    setTimeout(() => handleFileUri(uri), 800);
-  }, [navigatorReady]); 
-
-  // ── Loading splash ─────────────────────────────────────────────────────────
   if (!isReady) {
     return (
       <SafeAreaProvider>
@@ -151,9 +137,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AppNavigator onNavigatorReady={() => setNavigatorReady(true)} />
-      </ThemeProvider>
+      <NavigationErrorBoundary>
+        <ThemeProvider>
+          <AppNavigator />
+        </ThemeProvider>
+      </NavigationErrorBoundary>
     </SafeAreaProvider>
   );
 }
