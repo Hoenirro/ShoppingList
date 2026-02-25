@@ -1,4 +1,6 @@
-{
+import EAS_PROJECT_ID from 'dotenv/config';
+
+export default {
   "expo": {
     "name": "ShoppingList",
     "slug": "shoppinglist",
@@ -20,7 +22,9 @@
           {
             "CFBundleTypeName": "Shopping List",
             "CFBundleTypeRole": "Editor",
-            "LSItemContentTypes": ["com.shoppinglist.shoplist"],
+            "LSItemContentTypes": [
+              "com.shoppinglist.shoplist"
+            ],
             "LSHandlerRank": "Owner"
           }
         ],
@@ -28,9 +32,14 @@
           {
             "UTTypeIdentifier": "com.shoppinglist.shoplist",
             "UTTypeDescription": "Shopping List",
-            "UTTypeConformsTo": ["public.data", "public.content"],
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.content"
+            ],
             "UTTypeTagSpecification": {
-              "public.filename-extension": ["shoplist"],
+              "public.filename-extension": [
+                "shoplist"
+              ],
               "public.mime-type": "application/octet-stream"
             }
           }
@@ -47,7 +56,10 @@
         {
           "action": "VIEW",
           "autoVerify": false,
-          "category": ["DEFAULT", "BROWSABLE"],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
           "data": [
             {
               "scheme": "file",
@@ -59,7 +71,10 @@
         {
           "action": "VIEW",
           "autoVerify": false,
-          "category": ["DEFAULT", "BROWSABLE"],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
           "data": [
             {
               "scheme": "content",
@@ -71,7 +86,10 @@
         {
           "action": "VIEW",
           "autoVerify": false,
-          "category": ["DEFAULT", "BROWSABLE"],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
           "data": [
             {
               "scheme": "content",
@@ -97,12 +115,14 @@
           "photosPermission": "Allow Shopping List to access your photos.",
           "cameraPermission": "Allow Shopping List to use your camera to take product photos."
         }
-      ]
+      ],
+      "react-native-google-mobile-ads"
     ],
     "extra": {
       "eas": {
-        "projectId": "437fd496-c693-4d83-a5a0-5c6f42cec573"
-      }
+        "projectId": EAS_PROJECT_ID,
+      },
     }
   }
 }
+
