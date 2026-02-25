@@ -1,14 +1,180 @@
 // screens/ActiveListScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, Alert, Modal, TextInput, StatusBar, KeyboardAvoidingView, Platform,
+  Image, Alert, Modal, TextInput, StatusBar, KeyboardAvoidingView, Platform, Animated,
+  LayoutAnimation, UIManager,
 } from 'react-native';
 import { ShoppingListStorage } from '../utils/storage';
 import { ShoppingList, ShoppingListItem, ShoppingSession, ActiveSession } from '../types';
 import { useTheme } from '../theme/ThemeContext';
 import { makeCommonStyles, makeShadow } from '../theme/theme';
 import { getCategoryEmoji } from '../utils/categories';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Custom layout animation for smooth item movement
+const ITEM_MOVE_ANIMATION = {
+  duration: 400,
+  create: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+  update: {
+    type: LayoutAnimation.Types.spring,
+    springDamping: 0.7,
+  },
+  delete: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Memoized row — only re-renders when its own data changes
+// ─────────────────────────────────────────────────────────────────────────────
+interface RowProps {
+  item: ShoppingListItem;
+  isChecked: boolean;
+  isPending: boolean;
+  pendingProgress: Animated.Value | undefined;
+  price: number;
+  isEditing: boolean;
+  editingValue: string;
+  showDivider: boolean;
+  checkedCount: number;
+  theme: any;
+  c: any;
+  listId: string;
+  onToggleCheck: (item: ShoppingListItem) => void;
+  onPriceTap: (item: ShoppingListItem) => void;
+  onPriceChange: (v: string) => void;
+  onPriceCommit: (item: ShoppingListItem) => void;
+  onEditItem: (item: ShoppingListItem) => void;
+  isMoving?: boolean;
+  moveAnim?: Animated.Value;
+}
+
+const ShoppingListRow = memo(({
+  item, isChecked, isPending, pendingProgress, price, isEditing, editingValue,
+  showDivider, checkedCount, theme, c,
+  onToggleCheck, onPriceTap, onPriceChange, onPriceCommit, onEditItem,
+  isMoving, moveAnim,
+}: RowProps) => {
+  const fallback = getCategoryEmoji(item.category);
+  
+  // Animated style for moving items
+  const animatedStyle = moveAnim ? {
+    transform: [{
+      translateY: moveAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, isChecked ? -60 : 60], // Move up when checked, down when unchecked
+      }),
+    }],
+    opacity: moveAnim.interpolate({
+      inputRange: [0, 0.3, 0.7, 1],
+      outputRange: [1, 0.8, 0.8, 1],
+    }),
+  } : {};
+
+  return (
+    <>
+      {showDivider && (
+        <View style={[styles.sectionDivider, { borderColor: theme.divider }]}>
+          <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
+          <Text style={[styles.dividerLabel, { color: theme.textSubtle, backgroundColor: theme.bg }]}>
+            Done ({checkedCount})
+          </Text>
+          <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
+        </View>
+      )}
+      <Animated.View style={[
+        c.card, styles.itemRow,
+        isChecked && { opacity: 0.55, backgroundColor: theme.chip },
+        isPending && !isChecked && { backgroundColor: theme.success + '14' },
+        isMoving && animatedStyle,
+      ]}>
+        {/* Thumbnail */}
+        <TouchableOpacity
+          onPress={() => !isChecked && onEditItem(item)}
+          activeOpacity={isChecked ? 1 : 0.7}
+          disabled={isChecked}
+        >
+          {item.imageUri ? (
+            <Image source={{ uri: item.imageUri }} style={[c.thumbnail, isChecked && { opacity: 0.5 }]} />
+          ) : (
+            <View style={[c.thumbnail, c.placeholder]}>
+              <Text style={{ fontSize: 24 }}>{fallback}</Text>
+            </View>
+          )}
+          {!isChecked && (
+            <View style={[styles.editBadge, { backgroundColor: theme.accent }]}>
+              <Text style={styles.editBadgeText}>✎</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.itemName, { color: isChecked ? theme.textSubtle : theme.text }, isChecked && styles.strikethrough]}>
+            {item.name}
+          </Text>
+          <Text style={[styles.itemBrand, { color: theme.textMuted }]}>{item.brand}</Text>
+
+          {/* Inline price */}
+          <TouchableOpacity onPress={() => onPriceTap(item)} activeOpacity={isChecked ? 1 : 0.6} disabled={isChecked}>
+            {isEditing ? (
+              <TextInput
+                style={[styles.priceInput, { color: theme.accent, borderColor: theme.accent, backgroundColor: theme.inputBg }]}
+                value={editingValue}
+                onChangeText={onPriceChange}
+                keyboardType="decimal-pad"
+                autoFocus
+                selectTextOnFocus
+                onBlur={() => onPriceCommit(item)}
+                onSubmitEditing={() => onPriceCommit(item)}
+              />
+            ) : (
+              <View style={[styles.priceChip, { backgroundColor: theme.chip }]}>
+                <Text style={[styles.priceChipText, { color: isChecked ? theme.textSubtle : theme.accent }]}>
+                  ${(price || 0).toFixed(2)}
+                </Text>
+                {!isChecked && <Text style={[styles.priceEditHint, { color: theme.textSubtle }]}> ✎</Text>}
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Check button */}
+        <TouchableOpacity style={styles.checkBtnWrap} onPress={() => onToggleCheck(item)} activeOpacity={0.7}>
+          {isPending && pendingProgress ? (
+            <>
+              <View style={[styles.checkBtn, { position: 'absolute', borderColor: theme.border, borderWidth: 2, backgroundColor: 'transparent' }]} />
+              <Animated.View style={[styles.checkBtn, {
+                borderWidth: 2.5,
+                borderColor: theme.success,
+                backgroundColor: pendingProgress.interpolate({ inputRange: [0, 1], outputRange: ['transparent', theme.success + '33'] }),
+                transform: [{ scale: pendingProgress.interpolate({ inputRange: [0, 0.15, 0.3, 1], outputRange: [1, 1.12, 1, 1.05] }) }],
+              }]}>
+                <Text style={{ color: theme.success, fontSize: 14, fontWeight: '700' }}>✕</Text>
+              </Animated.View>
+            </>
+          ) : (
+            <View style={[styles.checkBtn, {
+              backgroundColor: isChecked ? theme.success : 'transparent',
+              borderColor: isChecked ? theme.success : theme.border,
+              borderWidth: 2,
+            }]}>
+              {isChecked && <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>✓</Text>}
+            </View>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </>
+  );
+});
 
 export default function ActiveListScreen({ route, navigation }: any) {
   const { listId } = route.params;
@@ -30,8 +196,23 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const [actualPaid, setActualPaid] = useState('');
   const [editingActual, setEditingActual] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [masterItems, setMasterItems] = useState<any[]>([]);
-  const [expandedBrandId, setExpandedBrandId] = useState<string | null>(null);
+
+  // Animation state for moving items
+  const [movingItems, setMovingItems] = useState<{ [key: string]: Animated.Value }>({});
+  const [pendingMove, setPendingMove] = useState<string | null>(null);
+
+  // key → { timerId, progress Animated.Value 0→1 over 3s }
+  const [pendingChecks, setPendingChecks] = useState<{
+    [key: string]: { timerId: ReturnType<typeof setTimeout>; progress: Animated.Value };
+  }>({});
+
+  // Refs always pointing at latest state
+  const checkedItemsRef = useRef(checkedItems);
+  const itemPricesRef   = useRef(itemPrices);
+  const listRef         = useRef(list);
+  useEffect(() => { checkedItemsRef.current = checkedItems; }, [checkedItems]);
+  useEffect(() => { itemPricesRef.current   = itemPrices;   }, [itemPrices]);
+  useEffect(() => { listRef.current         = list;         }, [list]);
 
   const getItemKey = (item: { masterItemId: string; variantIndex: number }) =>
     `${item.masterItemId}_${item.variantIndex}`;
@@ -58,7 +239,11 @@ export default function ActiveListScreen({ route, navigation }: any) {
     });
     loadActiveSession();
     const unsubscribe = navigation.addListener('focus', () => { if (isMounted) loadActiveSession(); });
-    return () => { isMounted = false; unsubscribe(); };
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      Object.values(pendingChecks).forEach(p => clearTimeout(p.timerId));
+    };
   }, [navigation]);
 
   const loadActiveSession = async () => {
@@ -73,8 +258,6 @@ export default function ActiveListScreen({ route, navigation }: any) {
       const currentList = lists.find(l => l.id === listId);
       if (!currentList) { Alert.alert('Error', 'List not found'); setIsLoading(false); return; }
 
-      // Re-hydrate each item's display fields from master item so edits
-      // made in EditMasterItem (brand, image, category) show up immediately
       const masterMap = new Map(masterItems.map((m: any) => [m.id, m]));
       const freshList = {
         ...currentList,
@@ -94,7 +277,6 @@ export default function ActiveListScreen({ route, navigation }: any) {
         }),
       };
       setList(freshList);
-      setMasterItems(masterItems);
 
       if (activeSession) {
         setCheckedItems(activeSession.checkedItems || {});
@@ -145,7 +327,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
   // ── Tap the price chip → enter inline edit mode ──────────────────────────
   const handlePriceTap = (item: ShoppingListItem) => {
     const key = getItemKey(item);
-    if (checkedItems[key]?.checked) return; // can't edit price of checked item
+    if (checkedItems[key]?.checked) return;
     const current = itemPrices[key] ?? item.lastPrice;
     setEditingKey(key);
     setEditingValue(current > 0 ? current.toFixed(2) : '');
@@ -156,7 +338,6 @@ export default function ActiveListScreen({ route, navigation }: any) {
     const parsed = parseFloat(editingValue);
     const price = isNaN(parsed) || parsed < 0 ? (item.lastPrice || 0) : parsed;
     const newPrices = { ...itemPrices, [key]: price };
-    // If already checked, update stored price too
     const newChecked = { ...checkedItems };
     if (newChecked[key]) newChecked[key] = { ...newChecked[key], price };
     setItemPrices(newPrices);
@@ -166,71 +347,83 @@ export default function ActiveListScreen({ route, navigation }: any) {
     await saveActiveSessionState(newChecked, newPrices);
   };
 
-  // ── Tap brand name → open variant picker ────────────────────────────────────
-  const handleSwitchVariant = async (item: ShoppingListItem, newVariantIndex: number) => {
-    if (!list) return;
-    const master = masterItems.find((m: any) => m.id === item.masterItemId);
-    if (!master) return;
-    const newVariant = master.variants[newVariantIndex];
-    if (!newVariant) return;
-
-    const oldKey = getItemKey(item);
-    const newItem: ShoppingListItem = {
-      ...item,
-      variantIndex: newVariantIndex,
-      brand: newVariant.brand,
-      imageUri: newVariant.imageUri ?? item.imageUri,
-      lastPrice: newVariant.defaultPrice ?? item.lastPrice,
-      averagePrice: newVariant.averagePrice ?? item.averagePrice,
-    };
-    const newKey = getItemKey(newItem);
-
-    // Update the list
-    const updatedItems = list.items.map(i =>
-      i.masterItemId === item.masterItemId && i.variantIndex === item.variantIndex ? newItem : i
-    );
-    const updatedList = { ...list, items: updatedItems, updatedAt: Date.now() };
-    await ShoppingListStorage.saveList(updatedList);
-    setList(updatedList);
-
-    // Migrate checked/price state to new key
-    const newChecked = { ...checkedItems };
-    const newPrices = { ...itemPrices };
-    if (newChecked[oldKey]) { newChecked[newKey] = newChecked[oldKey]; delete newChecked[oldKey]; }
-    if (newPrices[oldKey] !== undefined) { newPrices[newKey] = newPrices[oldKey]; delete newPrices[oldKey]; }
-    setCheckedItems(newChecked);
-    setItemPrices(newPrices);
-    await saveActiveSessionState(newChecked, newPrices);
-    setExpandedBrandId(null);
+  // ── Animate item movement ─────────────────────────────────────────────────
+  const animateItemMovement = async (item: ShoppingListItem, willBeChecked: boolean) => {
+    const key = getItemKey(item);
+    
+    // Create new animation value
+    const moveAnim = new Animated.Value(0);
+    setMovingItems(prev => ({ ...prev, [key]: moveAnim }));
+    
+    // Trigger layout animation for smooth list reordering
+    LayoutAnimation.configureNext(ITEM_MOVE_ANIMATION);
+    
+    // Animate the item flying to its new position
+    Animated.timing(moveAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start(() => {
+      // Clean up animation after completion
+      setMovingItems(prev => {
+        const newMoving = { ...prev };
+        delete newMoving[key];
+        return newMoving;
+      });
+    });
   };
 
-  // ── Tap the check circle → toggle checked state ──────────────────────────
-  const handleToggleCheck = async (item: ShoppingListItem) => {
-    const key = getItemKey(item);
-    const isChecked = checkedItems[key]?.checked || false;
+  // ── Commit: called when 3s countdown finishes ───────────────────────────────
+  const commitCheck = async (item: ShoppingListItem) => {
+    const key     = getItemKey(item);
+    const prices  = itemPricesRef.current;
+    const checked = checkedItemsRef.current;
+    const price   = prices[key] ?? item.lastPrice;
+    const newPrices  = { ...prices,  [key]: price };
+    const newChecked = { ...checked, [key]: { checked: true, price, checkedAt: Date.now() } };
+    
+    // Animate the item moving down
+    await animateItemMovement(item, true);
+    
+    await ShoppingListStorage.addPriceToHistory(
+      item.masterItemId, item.variantIndex, price, undefined, listRef.current?.name,
+    );
+    
+    setItemPrices(newPrices);
+    setCheckedItems(newChecked);
+    setPendingChecks(prev => { const n = { ...prev }; delete n[key]; return n; });
+    await saveActiveSessionState(newChecked, newPrices);
+  };
+
+  // ── Tap check circle ─────────────────────────────────────────────────────────
+  const handleToggleCheck = (item: ShoppingListItem) => {
+    const key       = getItemKey(item);
+    const isChecked = checkedItemsRef.current[key]?.checked || false;
+    const pending   = pendingChecks[key];
 
     if (isChecked) {
-      // Uncheck — remove from checked map
-      const newChecked = { ...checkedItems };
-      delete newChecked[key];
-      setCheckedItems(newChecked);
-      await saveActiveSessionState(newChecked, itemPrices);
-    } else {
-      // Check — record price, add to price history
-      const price = itemPrices[key] ?? item.lastPrice;
-      const newPrices = { ...itemPrices, [key]: price };
-      const newChecked = {
-        ...checkedItems,
-        [key]: { checked: true, price, checkedAt: Date.now() },
-      };
-      // Record to price history (session ID backfilled at save time)
-      await ShoppingListStorage.addPriceToHistory(
-        item.masterItemId, item.variantIndex, price, undefined, list?.name,
-      );
-      setItemPrices(newPrices);
-      setCheckedItems(newChecked);
-      await saveActiveSessionState(newChecked, newPrices);
+      // Animate the item moving up before unchecking
+      animateItemMovement(item, false).then(() => {
+        const newChecked = { ...checkedItemsRef.current };
+        delete newChecked[key];
+        setCheckedItems(newChecked);
+        saveActiveSessionState(newChecked, itemPricesRef.current);
+      });
+      return;
     }
+
+    if (pending) {
+      clearTimeout(pending.timerId);
+      pending.progress.stopAnimation();
+      setPendingChecks(prev => { const n = { ...prev }; delete n[key]; return n; });
+      return;
+    }
+
+    // Start countdown
+    const progress = new Animated.Value(0);
+    Animated.timing(progress, { toValue: 1, duration: 1000, useNativeDriver: false }).start();
+    const timerId = setTimeout(() => commitCheck(item), 1000);
+    setPendingChecks(prev => ({ ...prev, [key]: { timerId, progress } }));
   };
 
   const handleCompleteShopping = async () => {
@@ -251,10 +444,8 @@ export default function ActiveListScreen({ route, navigation }: any) {
     const uri = await ShoppingListStorage.pickImage();
     if (uri) {
       const saved = await ShoppingListStorage.saveImage(uri, 'receipt');
-      if (saved) {
       setReceiptImage(saved);
       await saveActiveSessionState(undefined, undefined, saved);
-      }
     }
   };
 
@@ -276,7 +467,6 @@ export default function ActiveListScreen({ route, navigation }: any) {
 
     await ShoppingListStorage.saveSession(session);
 
-    // Backfill real session ID into price history records
     for (const item of list.items) {
       const key = getItemKey(item);
       if (checkedItems[key]?.checked && itemPrices[key] !== undefined) {
@@ -299,157 +489,51 @@ export default function ActiveListScreen({ route, navigation }: any) {
   const totalSoFar = Object.values(itemPrices).reduce((a, b) => a + b, 0);
   const progress = list ? checkedCount / Math.max(list.items.length, 1) : 0;
 
-  const renderItem = ({ item, index }: { item: ShoppingListItem; index: number }) => {
-    const key = getItemKey(item);
-    const isChecked = checkedItems[key]?.checked || false;
-    const price = itemPrices[key] ?? item.lastPrice;
-    const isEditing = editingKey === key;
-    const fallback = getCategoryEmoji(item.category);
-    const master = masterItems.find((m: any) => m.id === item.masterItemId);
-    const isExpanded = expandedBrandId === key;
+  // Stable callbacks
+  const handleEditItem = useCallback((item: ShoppingListItem) => {
+    navigation.navigate('EditMasterItem', { itemId: item.masterItemId, returnTo: 'ActiveList', listId });
+  }, [navigation, listId]);
 
-    // Section divider between unchecked and checked
-    const showDivider = index === unchecked.length && checked.length > 0 && unchecked.length > 0;
+  const handlePriceChangeText = useCallback((v: string) => setEditingValue(v), []);
+
+  const renderItem = useCallback(({ item, index }: { item: ShoppingListItem; index: number }) => {
+    const key             = getItemKey(item);
+    const isChecked       = checkedItems[key]?.checked || false;
+    const isPending       = !!pendingChecks[key];
+    const pendingProgress = pendingChecks[key]?.progress;
+    const price           = itemPrices[key] ?? item.lastPrice;
+    const isEditing       = editingKey === key;
+    const showDivider     = index === unchecked.length && checked.length > 0 && unchecked.length > 0;
+    const isMoving        = !!movingItems[key];
+    const moveAnim        = movingItems[key];
 
     return (
-      <>
-        {showDivider && (
-          <View style={[styles.sectionDivider, { borderColor: theme.divider }]}>
-            <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
-            <Text style={[styles.dividerLabel, { color: theme.textSubtle, backgroundColor: theme.bg }]}>
-              Done ({checkedCount})
-            </Text>
-            <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
-          </View>
-        )}
-        <View style={[
-          c.card,
-          isChecked && { opacity: 0.55, backgroundColor: theme.chip },
-        ]}>
-          {/* Main row */}
-          <View style={styles.itemRow}>
-            {/* Thumbnail — tap to edit product */}
-            <TouchableOpacity
-              onPress={() => !isChecked && navigation.navigate('EditMasterItem', {
-                itemId: item.masterItemId,
-                returnTo: 'ActiveList',
-                listId,
-              })}
-              activeOpacity={isChecked ? 1 : 0.7}
-              disabled={isChecked}
-            >
-              {item.imageUri ? (
-                <Image source={{ uri: item.imageUri }} style={[c.thumbnail, isChecked && { opacity: 0.5 }]} />
-              ) : (
-                <View style={[c.thumbnail, c.placeholder]}>
-                  <Text style={{ fontSize: 24 }}>{fallback}</Text>
-                </View>
-              )}
-              {!isChecked && (
-                <View style={[styles.editBadge, { backgroundColor: theme.accent }]}>
-                  <Text style={styles.editBadgeText}>✎</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <View style={{ flex: 1 }}>
-              <Text style={[
-                styles.itemName,
-                { color: isChecked ? theme.textSubtle : theme.text },
-                isChecked && styles.strikethrough,
-              ]}>
-                {item.name}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  if (isChecked || !master || master.variants.length <= 1) return;
-                  setExpandedBrandId(prev => prev === key ? null : key);
-                }}
-                disabled={isChecked}
-                activeOpacity={0.6}
-              >
-                <Text style={[styles.itemBrand, { color: isChecked ? theme.textMuted : theme.accent }]}>
-                  {item.brand}{!isChecked && (master?.variants?.length ?? 0) > 1 ? ' ↕' : ''}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Inline price — tap to edit */}
-              <TouchableOpacity
-                onPress={() => handlePriceTap(item)}
-                activeOpacity={isChecked ? 1 : 0.6}
-                disabled={isChecked}
-              >
-                {isEditing ? (
-                  <TextInput
-                    style={[styles.priceInput, {
-                      color: theme.accent,
-                      borderColor: theme.accent,
-                      backgroundColor: theme.inputBg,
-                    }]}
-                    value={editingValue}
-                    onChangeText={setEditingValue}
-                    keyboardType="decimal-pad"
-                    autoFocus
-                    selectTextOnFocus
-                    onBlur={() => handlePriceCommit(item)}
-                    onSubmitEditing={() => handlePriceCommit(item)}
-                  />
-                ) : (
-                  <View style={[styles.priceChip, { backgroundColor: theme.chip }]}>
-                    <Text style={[styles.priceChipText, { color: isChecked ? theme.textSubtle : theme.accent }]}>
-                      ${(price || 0).toFixed(2)}
-                    </Text>
-                    {!isChecked && (
-                      <Text style={[styles.priceEditHint, { color: theme.textSubtle }]}> ✎</Text>
-                    )}
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Check button */}
-            <TouchableOpacity
-              style={[
-                styles.checkBtn,
-                {
-                  backgroundColor: isChecked ? theme.success : 'transparent',
-                  borderColor: isChecked ? theme.success : theme.border,
-                  borderWidth: 2,
-                },
-              ]}
-              onPress={() => handleToggleCheck(item)}
-              activeOpacity={0.7}
-            >
-              {isChecked && (
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>✓</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Brand bubbles — below the row when expanded */}
-          {isExpanded && master && (
-            <View style={styles.brandBubbles}>
-              {master.variants.map((v: any, i: number) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.brandBubble, {
-                    backgroundColor: i === item.variantIndex ? theme.chipSelected : theme.chip,
-                    borderColor: i === item.variantIndex ? theme.accent : theme.border,
-                  }]}
-                  onPress={() => handleSwitchVariant(item, i)}
-                >
-                  <Text style={[styles.brandBubbleName, { color: theme.text }]}>{v.brand}</Text>
-                  {v.defaultPrice > 0 && (
-                    <Text style={[styles.brandBubblePrice, { color: theme.accent }]}>${v.defaultPrice.toFixed(2)}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-      </>
+      <ShoppingListRow
+        item={item}
+        isChecked={isChecked}
+        isPending={isPending}
+        pendingProgress={pendingProgress}
+        price={price}
+        isEditing={isEditing}
+        editingValue={editingValue}
+        showDivider={showDivider}
+        checkedCount={checkedCount}
+        theme={theme}
+        c={c}
+        listId={listId}
+        onToggleCheck={handleToggleCheck}
+        onPriceTap={handlePriceTap}
+        onPriceChange={handlePriceChangeText}
+        onPriceCommit={handlePriceCommit}
+        onEditItem={handleEditItem}
+        isMoving={isMoving}
+        moveAnim={moveAnim}
+      />
     );
-  };
+  }, [checkedItems, pendingChecks, itemPrices, editingKey, editingValue,
+      unchecked.length, checked.length, checkedCount, movingItems,
+      theme, c, listId, handleToggleCheck, handlePriceTap, 
+      handlePriceCommit, handleEditItem, handlePriceChangeText]);
 
   if (isLoading || !list) {
     return (
@@ -497,6 +581,8 @@ export default function ActiveListScreen({ route, navigation }: any) {
         data={sortedItems}
         renderItem={renderItem}
         keyExtractor={item => getItemKey(item)}
+        extraData={[checkedItems, pendingChecks, itemPrices, editingKey, movingItems]}
+        removeClippedSubviews={false}
         contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
         ListEmptyComponent={
           <View style={c.emptyContainer}>
@@ -512,7 +598,7 @@ export default function ActiveListScreen({ route, navigation }: any) {
         }
       />
 
-      {/* Completion Modal */}
+      {/* Completion Modal (unchanged) */}
       <Modal
         animationType="slide"
         transparent
@@ -618,10 +704,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', paddingHorizontal: 6,
   },
   itemRow: { flexDirection: 'row', alignItems: 'center' },
-  brandBubbles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
-  brandBubble: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
-  brandBubbleName: { fontSize: 13, fontWeight: '600' },
-  brandBubblePrice: { fontSize: 11, marginTop: 1 },
   editBadge: {
     position: 'absolute', bottom: -2, right: 8,
     width: 16, height: 16, borderRadius: 8,
@@ -641,9 +723,13 @@ const styles = StyleSheet.create({
     fontSize: 15, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 8, borderWidth: 1.5, minWidth: 80,
   },
+  checkBtnWrap: {
+    width: 38, height: 38, marginLeft: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
   checkBtn: {
     width: 38, height: 38, borderRadius: 19,
-    justifyContent: 'center', alignItems: 'center', marginLeft: 10,
+    justifyContent: 'center', alignItems: 'center',
   },
   summaryBox: { borderRadius: 12, padding: 16, marginBottom: 14, borderWidth: 1 },
   summaryLabel: { fontSize: 14 },
